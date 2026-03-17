@@ -148,23 +148,25 @@ def _sort_result(
 ) -> pd.DataFrame:
     ascending = sort_order != "desc"
 
+    # Always apply calendar ordering when month_name is a dimension.
+    # After aggregation, month_name only appears in the result if it was
+    # grouped on, so its presence is a reliable signal.
+    if "month_name" in df.columns:
+        df = df.copy()
+        df["_month_order"] = df["month_name"].map(
+            {m: i for i, m in enumerate(_MONTH_ORDER)}
+        )
+        df = df.sort_values("_month_order", ascending=True).drop(
+            columns=["_month_order"]
+        )
+        return df
+
     if sort_by == "metric" or sort_by == metric:
         return df.sort_values(metric, ascending=ascending)
 
     # Numeric time dimensions → natural integer sort
     if sort_by in _TIME_DIMS and sort_by in df.columns:
         return df.sort_values(sort_by, ascending=ascending)
-
-    # month_name special ordering
-    if sort_by == "month_name" and "month_name" in df.columns:
-        df = df.copy()
-        df["_month_order"] = df["month_name"].map(
-            {m: i for i, m in enumerate(_MONTH_ORDER)}
-        )
-        df = df.sort_values("_month_order", ascending=ascending).drop(
-            columns=["_month_order"]
-        )
-        return df
 
     # Dimension sort (alphabetical)
     if sort_by in df.columns:

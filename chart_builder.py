@@ -101,6 +101,9 @@ def _bar(df: pd.DataFrame, x: str, y: str, result: dict) -> go.Figure:
         fig.update_traces(
             hovertemplate=_hover_fmt_h(y),
             marker_line_width=0,
+            texttemplate="%{x:.2s}",
+            textposition="outside",
+            textfont=dict(color=_WHITE, size=11),
         )
         fig.update_layout(
             **_base_layout(title, y_label, x_label),
@@ -127,6 +130,9 @@ def _bar(df: pd.DataFrame, x: str, y: str, result: dict) -> go.Figure:
         fig.update_traces(
             hovertemplate=_hover_fmt(y),
             marker_line_width=0,
+            texttemplate="%{y:.2s}",
+            textposition="outside",
+            textfont=dict(color=_WHITE, size=11),
         )
         fig.update_layout(**_base_layout(title, x_label, y_label))
 
@@ -135,6 +141,9 @@ def _bar(df: pd.DataFrame, x: str, y: str, result: dict) -> go.Figure:
         fig.update_traces(marker_cornerradius=6)
     except Exception:
         pass
+
+    if len(result.get("dimensions", [])) == 1:
+        fig.update_layout(showlegend=False)
 
     fig.update_coloraxes(showscale=False)
     return fig

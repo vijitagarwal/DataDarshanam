@@ -6,7 +6,11 @@ from dotenv import load_dotenv
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-_SYSTEM_PROMPT = "Write 2-3 sentence business insight. No bullets or headers. Use exact numbers. End with a recommendation."
+# Set to True when the API call fails and the template fallback is used.
+# Checked by app.py to show a toast notification.
+_last_used_fallback: bool = False
+
+_SYSTEM_PROMPT = "Write exactly 2-3 sentences. No bullets or headers. Use exact numbers from the data. End with one actionable recommendation."
 
 
 def _format_prompt(user_query: str, result: dict) -> str:
@@ -30,6 +34,9 @@ def _format_prompt(user_query: str, result: dict) -> str:
 
 
 def generate_insight(user_query: str, result: dict) -> str:
+    global _last_used_fallback
+    _last_used_fallback = False
+
     if result.get("error"):
         return result.get("message", "An unknown error occurred.")
 
@@ -53,6 +60,7 @@ def generate_insight(user_query: str, result: dict) -> str:
             insight = insight[1:-1].strip()
         return insight
     except Exception:
+        _last_used_fallback = True
         summary = result.get("summary", {})
         max_label = summary.get("max_label", "N/A")
         max_value = summary.get("max_value", 0)
