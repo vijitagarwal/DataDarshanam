@@ -147,6 +147,14 @@ def _line(df: pd.DataFrame, x: str, y: str, result: dict) -> go.Figure:
 
     color_dim = result["dimensions"][1] if len(result["dimensions"]) > 1 else None
 
+    # Sort by calendar order when x-axis is month_name
+    if x == "month_name" and x in df.columns:
+        month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        df = df.copy()
+        df[x] = pd.Categorical(df[x], categories=month_order, ordered=True)
+        df = df.sort_values(x)
+
     fig = px.line(
         df,
         x=x, y=y,

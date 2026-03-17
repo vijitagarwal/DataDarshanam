@@ -1,69 +1,32 @@
 import os
-import json
 
-import google.generativeai as genai
+from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-_model = genai.GenerativeModel("gemini-2.0-flash")
-
-_SYSTEM_PROMPT = """You are a senior business analyst writing executive-level data insights.
-
-Rules:
-- Respond in exactly 2-3 sentences. No more.
-- No bullet points, no headers, no markdown — plain prose only.
-- Start with the most striking finding from the data.
-- Use the exact numbers provided. Do NOT invent or estimate figures not given.
-- End with a concise, actionable recommendation if the data supports one.
-- Write in a confident, direct tone — like a Bloomberg Market Brief.
-
-Output format (example):
-"Middle East leads with $2.3M in total revenue, accounting for 26% of global sales. Electronics is the top category, outperforming the average by 34%. Consider increasing inventory in this region-category combination."
-"""
+_SYSTEM_PROMPT = "Write 2-3 sentence business insight. No bullets or headers. Use exact numbers. End with a recommendation."
 
 
 def _format_prompt(user_query: str, result: dict) -> str:
     summary = result.get("summary", {})
-    data_rows = result.get("data", [])
+    top_rows = result.get("data", [])[:3]
     metric = result.get("metric", "value")
-    title = result.get("title", "")
-    dimensions = result.get("dimensions", [])
 
-    top_rows = data_rows[:3]
+    total = summary.get("total", "")
+    max_label = summary.get("max_label", "")
+    max_value = summary.get("max_value", "")
 
-    summary_lines = []
-    if "total" in summary:
-        summary_lines.append(f"Total {metric}: {summary['total']:,.2f}")
-    if "average" in summary:
-        summary_lines.append(f"Average {metric}: {summary['average']:,.2f}")
-    if "max_value" in summary and "max_label" in summary:
-        summary_lines.append(
-            f"Highest {metric}: {summary['max_value']:,.2f} ({summary['max_label']})"
-        )
-    if "row_count" in summary:
-        summary_lines.append(f"Data points: {summary['row_count']}")
+    rows_str = "; ".join(
+        str({k: v for k, v in row.items()}) for row in top_rows
+    )
 
-    top_rows_text = json.dumps(top_rows, indent=2, default=str)
-
-    prompt = f"""{_SYSTEM_PROMPT}
-
-=== ANALYSIS REQUEST ===
-User question: {user_query}
-Chart title: {title}
-Metric: {metric}
-Dimensions: {', '.join(dimensions) if dimensions else 'none'}
-
-=== SUMMARY STATISTICS ===
-{chr(10).join(summary_lines) if summary_lines else 'No summary available.'}
-
-=== TOP DATA ROWS (up to 3) ===
-{top_rows_text}
-
-Now write your 2-3 sentence insight:"""
-
-    return prompt
+    return (
+        f"Q: {user_query}\n"
+        f"Metric: {metric}. Total: {total}. Best: {max_label} ({max_value}).\n"
+        f"Top rows: {rows_str}"
+    )
 
 
 def generate_insight(user_query: str, result: dict) -> str:
@@ -76,17 +39,22 @@ def generate_insight(user_query: str, result: dict) -> str:
     prompt = _format_prompt(user_query, result)
 
     try:
-        response = _model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.4,
-                max_output_tokens=256,
-            ),
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+            max_tokens=200,
         )
-        insight = response.text.strip()
-        # Strip any accidental markdown quotes Gemini may wrap around the response
+        insight = response.choices[0].message.content.strip()
         if insight.startswith('"') and insight.endswith('"'):
             insight = insight[1:-1].strip()
         return insight
-    except Exception as e:
-        return f"Could not generate insight: {e}"
+    except Exception:
+        summary = result.get("summary", {})
+        max_label = summary.get("max_label", "N/A")
+        max_value = summary.get("max_value", 0)
+        metric = result.get("metric", "value").replace("_", " ")
+        return f"Top performer: {max_label} with ${max_value:,.0f} in {metric}."
