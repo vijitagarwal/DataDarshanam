@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 import re
@@ -133,6 +134,37 @@ def _extract_json(text: str) -> dict:
     return json.loads(match.group())
 
 
+def is_chitchat(query: str) -> bool:
+    """Return True if the query is conversational rather than a data question."""
+    q = query.lower().strip()
+
+    chitchat_exact = {
+        "hello", "hi", "hey", "awesome", "great", "thanks", "thank you",
+        "cool", "nice", "ok", "okay", "wow", "yep", "nope", "sure", "bye",
+        "good", "bad", "how are you", "what can you do", "who are you",
+        "how are you?", "what's up", "whats up", "sup",
+    }
+    if q in chitchat_exact:
+        return True
+
+    # Too short to be a data query (under 3 words)
+    if len(q.split()) < 3:
+        return True
+
+    # Must contain at least one data-related keyword
+    data_keywords = [
+        "show", "tell", "what", "how", "revenue", "sales", "trend",
+        "compare", "top", "best", "worst", "average", "total", "count",
+        "region", "category", "product", "month", "year", "quarter",
+        "rating", "discount", "payment", "chart", "graph", "breakdown",
+        "analyze", "analysis", "dashboard", "report", "filter", "by",
+    ]
+    if not any(kw in q for kw in data_keywords):
+        return True
+
+    return False
+
+
 def parse_query(user_query: str, previous_context: dict = None) -> dict:
     if not user_query or not user_query.strip():
         return {
@@ -140,13 +172,7 @@ def parse_query(user_query: str, previous_context: dict = None) -> dict:
             "message": "Query is empty. Please ask a question about the sales data.",
         }
 
-    _CHITCHAT = {
-        "hello", "hi", "hey", "awesome", "great", "thanks", "thank you",
-        "cool", "nice", "ok", "okay", "wow", "yep", "nope", "sure", "bye",
-        "good", "bad", "help", "what can you do", "who are you",
-    }
-    _words = set(user_query.lower().split())
-    if _words & _CHITCHAT:
+    if is_chitchat(user_query):
         return {
             "error": True,
             "message": (

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -306,7 +307,37 @@ def _heatmap(df: pd.DataFrame, result: dict) -> go.Figure:
 # Public API
 # ---------------------------------------------------------------------------
 
-def build_chart(result: dict) -> go.Figure:
+def _apply_light_theme(fig: go.Figure) -> None:
+    """Override dark-mode colors with light-theme equivalents."""
+    lf = "#0F172A"   # light font
+    fig.update_layout(
+        plot_bgcolor="#FFFFFF",
+        paper_bgcolor="#F8FAFC",
+        font=dict(color=lf),
+        title=dict(font=dict(color=lf)),
+        legend=dict(font=dict(color=lf)),
+        hoverlabel=dict(bgcolor="#F1F5F9", font_color=lf),
+        xaxis=dict(
+            tickfont=dict(color=lf),
+            title=dict(font=dict(color=lf)),
+            gridcolor="#E2E8F0",
+        ),
+        yaxis=dict(
+            tickfont=dict(color=lf),
+            title=dict(font=dict(color=lf)),
+            gridcolor="#E2E8F0",
+        ),
+    )
+    # Fix text labels on bars / lines
+    fig.update_traces(textfont_color=lf)
+    # Fix line-chart marker borders
+    fig.update_traces(
+        marker=dict(line=dict(color="#F8FAFC")),
+        selector=dict(type="scatter"),
+    )
+
+
+def build_chart(result: dict, is_dark: bool = True) -> go.Figure:
     """
     Convert a data_engine result dict into a styled Plotly Figure.
 
@@ -365,5 +396,8 @@ def build_chart(result: dict) -> go.Figure:
     else:
         # "bar" or any unknown type → default to bar
         fig = _bar(df, x_dim, metric, result)
+
+    if not is_dark:
+        _apply_light_theme(fig)
 
     return fig

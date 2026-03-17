@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import pandas as pd
 
 DATA_PATH = "sales.csv"
@@ -202,6 +203,21 @@ def _build_summary(df: pd.DataFrame, metric: str, dimensions: list) -> dict:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare and enrich a DataFrame with date columns.
+    Handles missing date columns gracefully (e.g., custom CSV uploads).
+    """
+    if "order_date" in df.columns:
+        df = df.copy()
+        df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
+        df["year"]       = df["order_date"].dt.year
+        df["month"]      = df["order_date"].dt.month
+        df["month_name"] = df["order_date"].dt.strftime("%b")
+        df["quarter"]    = df["order_date"].dt.quarter
+    return df
+
 
 def get_dataframe() -> pd.DataFrame:
     """Return the cached raw DataFrame (for reference / display purposes)."""
