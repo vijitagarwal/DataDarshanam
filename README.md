@@ -1,14 +1,47 @@
-# 📊 DataDarshan — Conversational BI Dashboard
+# DATAdarshanam 📊
+### Conversational AI for Instant Business Intelligence Dashboards
 
-DataDarshan is a natural-language business intelligence dashboard that lets you explore sales data through plain-English questions. Type a question, and the app uses Google Gemini to parse your intent, runs the query against a pandas DataFrame, renders an interactive Plotly chart with a dark-themed design system, and delivers a 2–3 sentence AI-generated insight — all in under five seconds.
+> Natural language → Interactive charts → AI insights. Instantly.
+
+🔗 **Live Demo:** https://datadarshanam.streamlit.app
 
 ---
 
-## Screenshot
+## What is DATAdarshanam?
 
-> *Add a screenshot here before presentation.*
->
-> `docs/screenshot.png`
+DATAdarshanam is a conversational BI dashboard that lets
+non-technical users — executives, managers, analysts —
+query business data using plain English and instantly get
+interactive charts, KPI tiles, and AI-generated insights.
+No SQL. No BI tool expertise required.
+
+---
+
+## Demo Queries
+
+Try these in the live app:
+
+| Complexity | Query |
+|---|---|
+| Simple | `Show total revenue by region as a bar chart` |
+| Medium | `Show monthly revenue trend for 2023 as a line chart` |
+| Complex | `Show top 5 product categories by average rating as a bar chart` |
+| Follow-up | `Now filter this to only show Asia` |
+| Dashboard | Click **Generate Full Dashboard** for 3 charts at once |
+
+---
+
+## Features
+
+- **Natural Language Queries** — Ask data questions in plain English
+- **Smart Chart Selection** — Automatically picks bar, line, pie, scatter based on query
+- **AI-Generated Insights** — 2-3 sentence business analyst commentary per chart
+- **KPI Tiles** — Total, Average, Top Performer displayed per query
+- **Multi-Chart Dashboard** — Generate 3 charts simultaneously with one click
+- **CSV Upload** — Upload your own dataset and query it instantly
+- **Hallucination Handling** — Gracefully rejects queries about unavailable fields
+- **Interactive Charts** — Hover tooltips, zoom, scroll zoom, double-click to reset
+- **Conversation History** — All queries and charts persist in session
 
 ---
 
@@ -17,93 +50,102 @@ DataDarshan is a natural-language business intelligence dashboard that lets you 
 | Layer | Technology |
 |---|---|
 | Frontend | Streamlit |
-| Charts | Plotly Express / Graph Objects |
-| Data | Pandas |
-| AI | Google Gemini API (`gemini-1.5-flash`) |
-| Config | python-dotenv |
+| Charts | Plotly Express |
+| Data Processing | Pandas |
+| LLM | Groq LLaMA 3.3-70b-versatile |
+| Language | Python 3.x |
 
 ---
 
-## Setup
+## Dataset
 
-### 1. Clone and install
+The app uses a sales dataset (`sales.csv`) with 50,000 rows covering:
 
-```bash
-git clone <repo-url>
-cd DataDarshan2
-pip install -r requirements.txt
+| Column | Description |
+|---|---|
+| order_date | Jan 2022 – Dec 2023 |
+| product_category | Beauty, Books, Electronics, Fashion, Home & Kitchen, Sports |
+| customer_region | Asia, Europe, Middle East, North America |
+| payment_method | Cash on Delivery, Credit Card, Debit Card, UPI, Wallet |
+| total_revenue | Key metric for most queries |
+| rating | Customer rating (1–5) |
+| quantity_sold, discount_percent | Additional metrics |
+
+---
+
+## Architecture
 ```
-
-### 2. Add your Gemini API key
-
-```bash
-cp .env.example .env
-# Open .env and replace  your_key_here  with your actual key
+User Query
+↓
+LLM Parser (Groq LLaMA 3.3)
+Extracts: metric, dimensions, filters, chart_type
+↓
+Data Engine (Pandas)
+Filters, aggregates, sorts 50,000 rows
+↓
+Chart Builder (Plotly Express)
+Renders bar, line, pie, scatter charts
+↓
+Insight Generator (Groq LLaMA 3.3)
+2-3 sentence business analyst commentary
+↓
+Streamlit Dashboard
+KPI tiles + Interactive chart + AI insight + Data summary
 ```
-
-Get a free key at [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
-
-### 3. Run
-
-```bash
-streamlit run app.py
-```
-
-The app opens at `http://localhost:8501`.
 
 ---
 
 ## Project Structure
-
 ```
-DataDarshan2/
-├── app.py            # Streamlit frontend — chat UI, sidebar, pipeline orchestration
-├── llm_parser.py     # Gemini-powered NL → JSON query parser
-├── data_engine.py    # Pandas query executor (filters, groupby, aggregation)
-├── chart_builder.py  # Plotly dark-theme chart renderer (bar, line, pie, scatter, heatmap)
-├── insight_gen.py    # Gemini-powered 2–3 sentence business insight generator
-├── sales.csv         # Sample dataset (2022–2023 sales, ~10k rows)
-├── requirements.txt
-├── .env.example
-└── README.md
+DATAdarshanam/
+├── app.py              # Streamlit UI and chat interface
+├── llm_parser.py       # Natural language → structured JSON via Groq
+├── data_engine.py      # JSON → pandas aggregation engine
+├── chart_builder.py    # Aggregated data → Plotly figures
+├── insight_gen.py      # Data summary → AI business insights
+├── sales.csv           # 50,000 row sales dataset
+├── requirements.txt    # Python dependencies
+└── README.md           # This file
 ```
 
 ---
 
-## Demo Queries
+## Local Setup
+```bash
+# 1. Clone the repo
+git clone https://github.com/vijitagarwal/DataDarshanam.git
+cd DataDarshanam
 
-Use these during the presentation to showcase the full range of chart types and AI insight quality:
+# 2. Install dependencies
+pip install -r requirements.txt
 
-| # | Query | What it demonstrates |
-|---|---|---|
-| 1 | `Show total revenue by region as a bar chart` | Vertical bar, KPI tiles, regional insight |
-| 2 | `Monthly revenue trend for 2023 broken down by product category` | Multi-series line chart, time intelligence |
-| 3 | `Top 5 product categories by average rating` | Ranked bar, `sort_by` + `limit` handling |
+# 3. Add your Groq API key
+echo "GROQ_API_KEY=your_key_here" > .env
 
----
+# 4. Run the app
+streamlit run app.py
+```
 
-## Dataset Schema
-
-`sales.csv` — 2022–2023 global sales records.
-
-| Column | Type | Description |
-|---|---|---|
-| `order_id` | int | Unique order identifier |
-| `order_date` | date | Order date (2022-01-01 – 2023-12-31) |
-| `product_id` | int | Product identifier |
-| `product_category` | str | Beauty · Books · Electronics · Fashion · Home & Kitchen · Sports |
-| `customer_region` | str | Asia · Europe · Middle East · North America |
-| `payment_method` | str | Cash on Delivery · Credit Card · Debit Card · UPI · Wallet |
-| `price` | float | Unit price |
-| `discount_percent` | int | Discount applied (%) |
-| `quantity_sold` | int | Units sold |
-| `rating` | float | Customer rating (1.0 – 5.0) |
-| `review_count` | int | Number of reviews |
-| `discounted_price` | float | Price after discount |
-| `total_revenue` | float | `discounted_price × quantity_sold` |
+Get a free Groq API key at https://console.groq.com
 
 ---
 
-## License
+## Evaluation Alignment
 
-MIT
+| Criteria | Implementation |
+|---|---|
+| Data Retrieval (Accuracy) | LLM parses query → pandas aggregation on 50K rows |
+| Chart Selection (Accuracy) | Rule-based mapping: trend→line, breakdown→pie, comparison→bar |
+| Error Handling (Accuracy) | Rejects unavailable fields, vague queries, chitchat |
+| Design (Aesthetics) | Dark theme, KPI tiles, color-coded charts |
+| Interactivity (Aesthetics) | Hover tooltips, zoom, scroll zoom, double-click reset |
+| User Flow (Aesthetics) | Chat interface, loading spinner, example queries |
+| Architecture (Innovation) | 5-stage pipeline: query→parse→aggregate→visualize→insight |
+| Prompt Engineering (Innovation) | Strict JSON schema, column-aware system prompt |
+| Hallucination Handling (Innovation) | Field validation, empty result detection, friendly errors |
+| Follow-up Queries (Bonus) | Conversation history with context passing |
+| CSV Upload (Bonus) | Upload any CSV and query it instantly |
+
+---
+
+Built with ❤️ for GFG Hackathon by Vijit Agarwal
