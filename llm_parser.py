@@ -8,16 +8,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_API_KEY = os.getenv("GROQ_API_KEY")
-_CONFIG_ERROR: str | None = (
-    "GROQ_API_KEY not found in .env file. "
-    "Create a .env file in the project root containing:\n\nGROQ_API_KEY=your_key_here"
-    if not _API_KEY
-    else None
-)
-
-client = Groq(api_key=_API_KEY) if _API_KEY else None
-
 SYSTEM_PROMPT = """You are a BI query parser. Return ONLY a raw JSON object — no markdown, no code fences, no prose.
 
 DATASET COLUMNS:
@@ -183,8 +173,12 @@ def parse_query(user_query: str, previous_context: dict = None) -> dict:
             ),
         }
 
-    if _CONFIG_ERROR:
-        return {"error": True, "message": _CONFIG_ERROR}
+    try:
+        import streamlit as st
+        api_key = st.secrets["GROQ_API_KEY"]
+    except:
+        api_key = os.getenv("GROQ_API_KEY")
+    client = Groq(api_key=api_key)
 
     context_block = ""
     if previous_context and not previous_context.get("error"):

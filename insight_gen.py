@@ -5,7 +5,6 @@ from groq import Groq
 from dotenv import load_dotenv
 
 load_dotenv()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # Set to True when the API call fails and the template fallback is used.
 # Checked by app.py to show a toast notification.
@@ -43,6 +42,13 @@ def generate_insight(user_query: str, result: dict) -> str:
 
     if not result.get("data"):
         return "No data was returned for this query. Try adjusting your filters or broadening the date range."
+
+    try:
+        import streamlit as st
+        api_key = st.secrets["GROQ_API_KEY"]
+    except:
+        api_key = os.getenv("GROQ_API_KEY")
+    client = Groq(api_key=api_key)
 
     prompt = _format_prompt(user_query, result)
 
