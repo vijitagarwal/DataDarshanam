@@ -148,6 +148,8 @@ def is_chitchat(query: str) -> bool:
         "region", "category", "product", "month", "year", "quarter",
         "rating", "discount", "payment", "chart", "graph", "breakdown",
         "analyze", "analysis", "dashboard", "report", "filter", "by",
+        "insights", "insight", "generate", "whole", "full", "all",
+        "give", "about", "data", "overview", "summary", "performance",
     ]
     if not any(kw in q for kw in data_keywords):
         return True

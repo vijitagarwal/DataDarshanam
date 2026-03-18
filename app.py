@@ -511,7 +511,7 @@ st.markdown("<div style='margin-bottom:24px;'></div>", unsafe_allow_html=True)
 # Render functions
 # ---------------------------------------------------------------------------
 
-def _render_mini_chart(chart: dict) -> None:
+def _render_mini_chart(chart: dict, index: int = 0) -> None:
     """Compact chart card used inside the 3-chart dashboard grid."""
     result = chart["result"]
     fig    = chart["fig"]
@@ -546,6 +546,7 @@ def _render_mini_chart(chart: dict) -> None:
     st.plotly_chart(
         fig,
         use_container_width=True,
+        key=f"dash_chart_{index}",
         config={
             'displayModeBar': True,
             'displaylogo': False,
@@ -575,12 +576,12 @@ def _render_dashboard_entry(entry: dict) -> None:
     if len(charts) >= 2:
         col_a, col_b = st.columns(2, gap="medium")
         with col_a:
-            _render_mini_chart(charts[0])
+            _render_mini_chart(charts[0], index=0)
         with col_b:
-            _render_mini_chart(charts[1])
+            _render_mini_chart(charts[1], index=1)
 
     if len(charts) >= 3:
-        _render_mini_chart(charts[2])
+        _render_mini_chart(charts[2], index=2)
 
     st.markdown('<hr class="chat-divider">', unsafe_allow_html=True)
 
@@ -629,6 +630,7 @@ def _render_entry(entry: dict) -> None:
         st.plotly_chart(
         fig,
         use_container_width=True,
+        key=f"chart_{hash(str(result.get('title','')))}",
         config={
             'displayModeBar': True,
             'displaylogo': False,
