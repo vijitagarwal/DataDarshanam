@@ -1,10 +1,7 @@
 import { QueryResponse, DashboardResponse, SchemaResponse, UploadResponse, QueryResultData } from "./types";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (typeof window !== "undefined" && window.location.hostname === "127.0.0.1"
-    ? "http://127.0.0.1:8000"
-    : "http://localhost:8000");
+// ✅ Same-origin API: frontend and backend are both on the same Vercel deployment.
+// All API routes live under /api/* — no external URL or environment variable needed.
 
 function getWorkspaceId(): string {
   const key = "datadarshan-workspace-id";
@@ -15,18 +12,11 @@ function getWorkspaceId(): string {
   return created;
 }
 
-function getApiBase(): string {
-  if (API_BASE.includes("your-backend-api-url")) {
-    throw new Error("The backend API URL is not configured for this deployment.");
-  }
-  return API_BASE.replace(/\/$/, "");
-}
-
 async function fetchApi(path: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 30_000);
+  const timeout = window.setTimeout(() => controller.abort(), 60_000);
   try {
-    return await fetch(`${getApiBase()}${path}`, {
+    return await fetch(path, {
       ...init,
       headers: {
         ...(init?.headers || {}),
@@ -36,7 +26,7 @@ async function fetchApi(path: string, init?: RequestInit): Promise<Response> {
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("The backend request timed out. Please try again.");
+      throw new Error("The request timed out. Please try again.");
     }
     throw error;
   } finally {
@@ -50,7 +40,8 @@ export async function fetchSchema(): Promise<SchemaResponse> {
     headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
-    throw new Error(`Failed to fetch dataset schema: ${res.statusText}`);
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to fetch dataset schema: ${res.statusText}`);
   }
   return res.json();
 }
@@ -69,7 +60,7 @@ export async function postQuery(
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Query failed (${res.status})`);
+    throw new Error(errorData.error || errorData.detail || `Query failed (${res.status})`);
   }
   return res.json();
 }
@@ -84,7 +75,7 @@ export async function postDashboardQuery(
   });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Dashboard generation failed (${res.status})`);
+    throw new Error(errorData.error || errorData.detail || `Dashboard generation failed (${res.status})`);
   }
   return res.json();
 }
@@ -100,8 +91,7 @@ export async function uploadCSVFile(file: File): Promise<UploadResponse> {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `CSV upload failed (${res.status})`);
+    throw new Error(errorData.error || errorData.detail || `CSV upload failed (${res.status})`);
   }
-  const data = await res.json();
-  return data;
+  return res.json();
 }
