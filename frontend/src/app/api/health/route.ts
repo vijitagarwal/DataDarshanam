@@ -9,3 +9,4 @@ export async function GET() {
     ai_configured: !!process.env.GROQ_API_KEY,
   });
 }
+
