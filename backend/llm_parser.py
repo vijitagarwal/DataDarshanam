@@ -140,7 +140,7 @@ def parse_query(
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama3-70b-8192",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
@@ -166,7 +166,7 @@ def parse_query(
                 },
             ]
             raw = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama3-70b-8192",
                 messages=retry_messages,
                 temperature=0.0,
                 max_tokens=500,

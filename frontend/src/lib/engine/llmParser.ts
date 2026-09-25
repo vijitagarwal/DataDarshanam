@@ -112,7 +112,7 @@ export async function parseQuery(
   let raw: string;
   try {
     const response = await client.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+      model: "llama3-70b-8192",
       messages,
       temperature: 0.1,
       max_tokens: 500,
@@ -133,7 +133,7 @@ export async function parseQuery(
         { role: "user", content: "RETRY: Output ONLY a raw JSON object starting with { and ending with }. No markdown, no prose." },
       ];
       const retryResp = await client.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+        model: "llama3-70b-8192",
         messages: retryMessages,
         temperature: 0.0,
         max_tokens: 500,
