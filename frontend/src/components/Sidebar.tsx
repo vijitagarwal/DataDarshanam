@@ -302,7 +302,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="glass-card p-3 space-y-2 mt-1 text-[11px] text-slate-300">
               <div className="flex items-start gap-2">
                 <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[9px] shrink-0 mt-0.5">1</span>
-                <div><strong>Natural Query:</strong> Plain English inputparsed via LLaMA 3.3.</div>
+                <div><strong>Natural Query:</strong> Plain English inputparsed via LLaMA 3 70B.</div>
               </div>
               <div className="flex items-start gap-2">
                 <span className="w-4 h-4 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-[9px] shrink-0 mt-0.5">2</span>
@@ -323,7 +323,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer info */}
       <div className="p-3 border-t border-indigo-500/10 text-center text-[10px] text-slate-400">
-        Groq LLaMA 3.3 · Plotly · Pandas
+        Groq LLaMA 3 70B · Plotly · Pandas
       </div>
       </aside>
     </>

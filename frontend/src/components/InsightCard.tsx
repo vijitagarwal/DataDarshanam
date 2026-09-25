@@ -24,7 +24,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({ insight, fallback }) =
         ) : (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
             <Bot className="w-3 h-3" />
-            LLaMA 3.3
+            LLaMA 3 70B
           </span>
         )}
       </div>

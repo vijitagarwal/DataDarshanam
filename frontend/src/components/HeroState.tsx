@@ -43,7 +43,7 @@ export const HeroState: React.FC<HeroStateProps> = ({
       <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
         <span className="pill-chip flex items-center gap-1">
           <Brain className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Groq LLaMA 3.3 70B</span>
+          <span>Groq LLaMA 3 70B</span>
         </span>
         <span className="pill-chip flex items-center gap-1">
           <Zap className="w-3.5 h-3.5 text-amber-400" />
