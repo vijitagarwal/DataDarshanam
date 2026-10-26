@@ -8,13 +8,11 @@ import {
   Database,
   Bookmark,
   HelpCircle,
-  Upload,
   Trash2,
   Download,
   ChevronDown,
   ChevronUp,
   FileSpreadsheet,
-  CheckCircle2,
   AlertCircle,
   X,
 } from "lucide-react";

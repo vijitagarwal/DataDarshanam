@@ -52,8 +52,8 @@ export const ChartView: React.FC<ChartViewProps> = ({
   // Base Plotly data/layout from spec or fallback generator
   const baseSpec = plotlySpec ? (isDark ? plotlySpec.dark : plotlySpec.light) : null;
 
-  let plotData = baseSpec?.data ? [...baseSpec.data] : [];
-  let plotLayout = baseSpec?.layout ? { ...baseSpec.layout } : {
+  let plotData: PlotlyThemeSpec["data"] = baseSpec?.data ? [...baseSpec.data] : [];
+  let plotLayout: PlotlyThemeSpec["layout"] = baseSpec?.layout ? { ...baseSpec.layout } : {
     autosize: true,
     height: 380,
     margin: { t: 40, b: 50, l: 50, r: 20 },
@@ -129,6 +129,10 @@ export const ChartView: React.FC<ChartViewProps> = ({
   }
 
   // Ensure dark background and responsiveness
+  const existingTitle = plotLayout.title;
+  const title = existingTitle && typeof existingTitle === "object" && !Array.isArray(existingTitle)
+    ? existingTitle
+    : undefined;
   plotLayout = {
     ...plotLayout,
     autosize: true,
@@ -137,10 +141,12 @@ export const ChartView: React.FC<ChartViewProps> = ({
     plot_bgcolor: "transparent",
     margin: { t: 40, b: 50, l: 50, r: 20 },
     font: { family: "Inter, sans-serif", color: isDark ? "#94A3B8" : "#475569" },
-    title: plotLayout.title ? {
-      ...plotLayout.title,
-      font: { family: "Inter, sans-serif", size: 16, color: isDark ? "#F8FAFC" : "#0F172A" }
-    } : undefined
+    ...(title ? {
+      title: {
+        ...title,
+        font: { family: "Inter, sans-serif", size: 16, color: isDark ? "#F8FAFC" : "#0F172A" }
+      }
+    } : {})
   };
 
   // Pure Plotly.js DOM rendering (100% bypasses react-plotly.js bundler issues)

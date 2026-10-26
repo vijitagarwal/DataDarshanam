@@ -1,12 +1,14 @@
 /**
  * LLM Parser — TypeScript port of llm_parser.py
- * Uses Groq JS SDK with llama-3.3-70b-versatile
+ * Uses Groq JS SDK with the configured production model.
  */
 
 import Groq from "groq-sdk";
 import { ParsedQuery } from "./types";
 import { buildSchemaContext } from "./dataEngine";
 import { DataRow } from "./types";
+
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
 const BASE_SYSTEM_PROMPT = `You are a BI query parser for a live CSV dataset.
 Return ONLY a raw JSON object. No markdown, no code fences, no prose.
@@ -112,7 +114,7 @@ export async function parseQuery(
   let raw: string;
   try {
     const response = await client.chat.completions.create({
-      model: "llama3-70b-8192",
+      model: GROQ_MODEL,
       messages,
       temperature: 0.1,
       max_tokens: 500,
@@ -133,7 +135,7 @@ export async function parseQuery(
         { role: "user", content: "RETRY: Output ONLY a raw JSON object starting with { and ending with }. No markdown, no prose." },
       ];
       const retryResp = await client.chat.completions.create({
-        model: "llama3-70b-8192",
+        model: GROQ_MODEL,
         messages: retryMessages,
         temperature: 0.0,
         max_tokens: 500,

@@ -77,15 +77,9 @@ function buildBar(data: Record<string, unknown>[], x: string, y: string, result:
   const yVals = data.map(r => r[y] as number);
   const nCats = new Set(xVals).size;
   const horizontal = nCats > 6;
+  const maxVal = Math.max(...yVals);
 
   const colors = Array.from({ length: nCats }, (_, i) => PALETTE[i % PALETTE.length]);
-
-  const maxVal = Math.max(...yVals);
-  let textFmt: string;
-  if (maxVal >= 1_000_000) textFmt = ".2s";
-  else if (maxVal >= 1_000) textFmt = ",.0f";
-  else if (maxVal < 10) textFmt = ".2f";
-  else textFmt = ".1f";
 
   const layout = baseLayout(result.title, result.x_label, result.y_label, theme);
 

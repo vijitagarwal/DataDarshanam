@@ -1,7 +1,10 @@
+export type DataValue = string | number | boolean | null;
+export type PlotlyValue = DataValue | PlotlyValue[] | { [key: string]: PlotlyValue };
+
 export interface FilterItem {
   field: string;
   operator: string;
-  value: any;
+  value: DataValue | DataValue[];
 }
 
 export interface QueryParsed {
@@ -25,7 +28,7 @@ export interface QuerySummary {
 }
 
 export interface QueryResultData {
-  data: Record<string, any>[];
+  data: Record<string, DataValue>[];
   metric: string;
   dimensions: string[];
   summary: QuerySummary;
@@ -34,8 +37,8 @@ export interface QueryResultData {
 }
 
 export interface PlotlyThemeSpec {
-  data: any[];
-  layout: any;
+  data: Record<string, PlotlyValue>[];
+  layout: Record<string, PlotlyValue>;
 }
 
 export interface QueryResponse {
@@ -73,7 +76,7 @@ export interface DatasetColumnInfo {
   name: string;
   dtype: string;
   role: "numeric" | "categorical" | "date/time" | "text";
-  sample_values?: any[];
+  sample_values?: DataValue[];
 }
 
 export interface DatasetProfile {
@@ -83,7 +86,7 @@ export interface DatasetProfile {
   numeric_columns: string[];
   categorical_columns: string[];
   date_columns: string[];
-  sample_rows?: Record<string, any>[];
+  sample_rows?: Record<string, DataValue>[];
 }
 
 export interface SchemaResponse {
@@ -132,4 +135,3 @@ export interface ChartConfig {
   groupKey?: string;
   metrics?: MetricItem[];
 }
-

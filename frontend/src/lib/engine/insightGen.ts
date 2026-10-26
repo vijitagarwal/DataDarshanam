@@ -6,6 +6,8 @@
 import Groq from "groq-sdk";
 import { QueryResult } from "./types";
 
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+
 const SYSTEM_PROMPT = "Write exactly 2-3 sentences. No bullets or headers. Use exact numbers from the data. End with one actionable recommendation.";
 
 function formatPrompt(userQuery: string, result: QueryResult): string {
@@ -52,7 +54,7 @@ export async function generateInsight(userQuery: string, result: QueryResult): P
     const prompt = formatPrompt(userQuery, result);
 
     const response = await client.chat.completions.create({
-      model: "llama3-70b-8192",
+      model: GROQ_MODEL,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: prompt },

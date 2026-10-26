@@ -3,6 +3,7 @@ import os
 
 from groq import Groq
 from dotenv import load_dotenv
+import config
 
 load_dotenv()
 
@@ -54,7 +55,7 @@ def generate_insight(user_query: str, result: dict) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model=config.GROQ_MODEL,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},

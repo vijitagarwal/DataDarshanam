@@ -18,7 +18,7 @@ import llm_parser
 
 app = FastAPI(
     title="DataDarshanam API",
-    description="Backend API for Conversational BI Dashboard powered by Groq LLaMA 3.3",
+    description="Backend API for Conversational BI Dashboard powered by Groq",
     version="2.0.0",
 )
 

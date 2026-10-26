@@ -52,8 +52,8 @@ export default function Home() {
     // Get previous context from last successful query if available
     let previousContext = undefined;
     const lastEntry = chatEntries[chatEntries.length - 1];
-    if (lastEntry?.response?.parsed && !lastEntry.response.error) {
-      previousContext = lastEntry.response.parsed;
+    if (lastEntry?.response?.result && !lastEntry.response.error) {
+      previousContext = lastEntry.response.result;
     }
 
     try {

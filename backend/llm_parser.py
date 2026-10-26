@@ -7,6 +7,7 @@ import re
 
 from dotenv import load_dotenv
 from groq import Groq
+import config
 
 load_dotenv()
 
@@ -140,7 +141,7 @@ def parse_query(
 
     try:
         response = client.chat.completions.create(
-            model="llama3-70b-8192",
+            model=config.GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content},
@@ -166,7 +167,7 @@ def parse_query(
                 },
             ]
             raw = client.chat.completions.create(
-                model="llama3-70b-8192",
+                model=config.GROQ_MODEL,
                 messages=retry_messages,
                 temperature=0.0,
                 max_tokens=500,

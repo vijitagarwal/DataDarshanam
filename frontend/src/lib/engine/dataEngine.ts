@@ -451,7 +451,7 @@ export function runQuery(parsed: ParsedQuery, rows: DataRow[]): QueryResult {
   // Apply filters
   const filterResult = applyFilters([...rows], filters);
   if (filterResult.error) return err(filterResult.error);
-  let filtered = filterResult.rows;
+  const filtered = filterResult.rows;
   if (filtered.length === 0) return err("No data matched your filters. Try broadening your search criteria.");
 
   // Aggregate

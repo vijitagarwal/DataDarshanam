@@ -3,7 +3,7 @@
 import React from "react";
 import { DashboardResponse } from "@/lib/types";
 import { ChartView } from "./ChartView";
-import { LayoutGrid, Sparkles } from "lucide-react";
+import { LayoutGrid } from "lucide-react";
 
 interface DashboardViewProps {
   response: DashboardResponse;
