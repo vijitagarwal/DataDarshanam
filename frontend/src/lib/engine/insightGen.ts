@@ -67,7 +67,8 @@ export async function generateInsight(userQuery: string, result: QueryResult): P
     if (insight.startsWith('"') && insight.endsWith('"')) {
       insight = insight.slice(1, -1).trim();
     }
-    if (!insight) {
+    const sentenceCount = insight.split(/[.!?]+/).filter(Boolean).length;
+    if (!insight || sentenceCount < 2) {
       return { insight: fallbackInsight(result), fallback: true };
     }
     return { insight, fallback: false };
