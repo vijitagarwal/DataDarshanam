@@ -67,6 +67,9 @@ export async function generateInsight(userQuery: string, result: QueryResult): P
     if (insight.startsWith('"') && insight.endsWith('"')) {
       insight = insight.slice(1, -1).trim();
     }
+    if (!insight) {
+      return { insight: fallbackInsight(result), fallback: true };
+    }
     return { insight, fallback: false };
   } catch {
     return { insight: fallbackInsight(result), fallback: true };
