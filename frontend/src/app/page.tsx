@@ -9,6 +9,10 @@ import { ChatInputBar } from "@/components/ChatInputBar";
 import { fetchSchema, postQuery, postDashboardQuery, uploadCSVFile } from "@/lib/api";
 import { SchemaResponse, ChatEntry, SavedChart } from "@/lib/types";
 import { Database, Trash2, Layers, Menu } from "lucide-react";
+import { AuthControl } from "@/components/AuthControl";
+import { DocumentManager } from "@/components/DocumentManager";
+import { DocumentQaPanel } from "@/components/DocumentQaPanel";
+import type { DocumentItem } from "@/lib/documentApi";
 
 export default function Home() {
   const [schema, setSchema] = useState<SchemaResponse | null>(null);
@@ -19,6 +23,9 @@ export default function Home() {
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [datasetName, setDatasetName] = useState("sales.csv");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
 
   // Load dataset schema on initial mount
   useEffect(() => {
@@ -183,6 +190,7 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
+            <AuthControl />
             {!isChatEmpty && (
               <>
                 <button
@@ -208,6 +216,18 @@ export default function Home() {
 
         {/* Scrollable Conversation Workspace */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
+          <div className="mx-auto w-full max-w-5xl space-y-4">
+            <DocumentManager
+              onDocumentsChange={setDocuments}
+              onLoadingChange={setDocumentsLoading}
+              onErrorChange={setDocumentsError}
+            />
+            <DocumentQaPanel
+              documents={documents}
+              documentsLoading={documentsLoading}
+              documentsError={documentsError}
+            />
+          </div>
           {isChatEmpty ? (
             <HeroState
               suggestedQuestions={schema?.suggested_questions}

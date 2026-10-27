@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`dark ${inter.variable} ${devanagari.variable}`}>
-      <body className="bg-[#0A0D14] text-slate-100 antialiased min-h-screen">
+      <body className="antialiased min-h-screen">
         {children}
       </body>
     </html>
