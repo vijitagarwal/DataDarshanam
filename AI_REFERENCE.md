@@ -4,13 +4,15 @@ This document is the working reference for an AI agent modifying, debugging, dep
 
 ## Product
 
-DataDarshanam (`dataदर्शनम्`) is a conversational business-intelligence dashboard for non-technical users. A user asks a natural-language question about a CSV dataset and receives:
+DataDarshanam (`dataदर्शनम्`) is a conversational business-intelligence dashboard with a private document question-answering workspace. CSV analytics and document Q&A are separate flows. A user can ask a natural-language question about a CSV dataset and receive:
 
 - An aggregated query result.
 - An interactive Plotly chart.
 - KPI-style summary values.
 - A short AI-generated business insight.
 - A dataset schema/profile and suggested questions.
+
+Signed-in users can also upload supported documents, process them into canonical chunks and embeddings, retrieve owner-scoped evidence, and request a grounded answer with server-validated source references. This feature remains disabled by default until live provider and database checks pass.
 
 The default dataset is the 50,000-row Amazon sales dataset in `frontend/public/sales.csv`. Users can upload another CSV. Uploaded data is associated with a browser-generated workspace ID, not an authenticated account.
 
@@ -19,14 +21,16 @@ Production URL: <https://datadarshanam.vercel.app>
 ## Repository map
 
 - `frontend/`: the deployed Next.js application.
-  - `src/app/page.tsx`: top-level client application state and chat/dashboard orchestration.
-  - `src/app/api/`: same-origin Next.js route handlers for health, schema, query, dashboard, and upload.
+  - `src/app/page.tsx`: top-level analytics, document workspace, and Q&A composition.
+  - `src/app/api/`: same-origin Next.js route handlers for analytics and authenticated document workflows.
   - `src/components/`: UI, chart, KPI, sidebar, upload, and result components.
   - `src/lib/api.ts`: browser API client; adds `X-Workspace-ID` and a 60-second request timeout.
   - `src/lib/engine/dataEngine.ts`: TypeScript CSV parser, profiling, date enrichment, filtering, aggregation, sorting, and summaries.
   - `src/lib/engine/llmParser.ts`: Groq natural-language query parser.
   - `src/lib/engine/chartBuilder.ts`: Plotly figure-spec builder.
   - `src/lib/engine/insightGen.ts`: Groq insight generation with a deterministic fallback.
+  - `src/lib/supabase/`, `src/lib/ingestion/`, and `src/lib/embeddings/`: authenticated document management, bounded ingestion, embedding persistence, and retrieval services.
+  - `src/lib/groundedAnswer.ts`: bounded Groq answer generation with retrieved evidence and validated chunk references.
   - `public/sales.csv`: runtime default data loaded by server-side route handlers.
 - `backend/`: legacy/standalone FastAPI implementation.
   - `main.py`: `/api/health`, `/api/schema`, `/api/query`, `/api/dashboard`, and `/api/upload`.
@@ -39,17 +43,17 @@ Production URL: <https://datadarshanam.vercel.app>
 
 ## Runtime architecture
 
-The intended Vercel architecture is frontend-only:
+The Vercel application uses the frontend's same-origin route handlers:
 
 ```text
 Browser
   -> Next.js same-origin /api/* routes
-      -> TypeScript data engine
-      -> Groq API for query parsing and insights
-      -> Plotly JSON specs returned to browser
+      -> CSV analytics: TypeScript data engine -> Groq parsing/insights
+      -> Document Q&A: Supabase Auth/Storage/Postgres -> Gemini embeddings -> Groq answer
+      -> Validated JSON/Plotly/source metadata returned to browser
 ```
 
-The Python FastAPI backend is a separate legacy path and is not required by the current Next.js routes. Do not introduce a new cross-origin dependency unless deployment requirements change. If the Python service is used again, update both implementations consistently.
+The Python FastAPI backend is a separate legacy path and is not required by the current Next.js routes. Do not introduce a new cross-origin dependency unless deployment requirements change. If the Python service is used again, update both implementations consistently. Document ownership is derived from the verified Supabase user and database controls, never from `X-Workspace-ID`.
 
 Vercel should use `frontend/` as the project root. `frontend/vercel.json` declares the Next.js framework, `npm install`, `npm run build`, and `.next` output.
 
@@ -109,6 +113,15 @@ Request body contains an optional `query`. The route builds overview query specs
 
 Accepts a multipart field named `file`. Only `.csv` files are accepted. Limits are 25 MB, 250,000 rows, and 100 columns. The parsed rows are stored in an in-memory workspace map.
 
+### Document APIs
+
+- `GET /api/documents` lists the authenticated user's documents.
+- Document upload, completion, status, deletion, and embedding processing use the existing authenticated document routes; ownership is enforced server-side and by Supabase policies/RPCs.
+- `POST /api/retrieval` performs owner-scoped retrieval. Optional document IDs only narrow the authenticated user's search.
+- `POST /api/answers` calls the retrieval service directly, then performs bounded Groq generation. It returns `answered`, `insufficient_evidence`, or `no_evidence` with source objects built from validated retrieval records.
+- `DOCUMENT_RAG_ANSWERS_ENABLED` is server-only and defaults to `false`. Do not enable it for production until non-production Supabase/Gemini/Groq checks and deployment verification are complete.
+- The browser renders answer/source fields as data; it must not construct source URLs or trust model-provided citation metadata.
+
 ## Query/data behavior
 
 - CSV values are coerced to numbers where possible; blank, `null`, `NA`, and `N/A` become null.
@@ -140,7 +153,17 @@ MAX_UPLOAD_COLUMNS=100
 
 Never commit `.env`, `.env.local`, API keys, or deployment tokens. Only `.env.example` files belong in the repository.
 
+The frontend environment example also lists Supabase public client configuration, server-only service-role and Gemini credentials, the embedding identity, and `DOCUMENT_RAG_ANSWERS_ENABLED=false`. Never expose service-role, Gemini, or Groq credentials to browser code.
+
 The Groq model is configurable specifically to avoid hard-coding a retired model. The default currently used by the source is `openai/gpt-oss-120b`; verify the provider catalog before changing it in a future audit.
+
+## Current verification boundaries
+
+- Automated frontend tests mock Supabase, Gemini, and Groq boundaries. They validate local request handling and response contracts, not live service behavior.
+- The Mission 7C/8 migrations have not been verified against a live Supabase project. Effective RLS, Storage policies, grants, RPC execution, pgvector behavior, and cross-user isolation remain unverified.
+- No live Gemini, Groq, Supabase, or Vercel integration should be claimed unless a separate recorded non-production verification was actually performed.
+- Mission 10 documents current UI limitations: document selection is limited to extraction-ready records, embedding readiness is not exposed by the document-list API, and source metadata does not yet navigate to an excerpt.
+- The historical mission reports and their unresolved risks are indexed in [`docs/mission-history/README.md`](./docs/mission-history/README.md).
 
 ## Deployment audit: 2026-10-21
 

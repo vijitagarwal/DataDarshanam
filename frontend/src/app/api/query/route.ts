@@ -15,9 +15,28 @@ function getWorkspaceId(req: NextRequest): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const query: string = (body.query ?? "").trim();
-    const previousContext = body.previous_context ?? null;
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: true, message: "Request body must be valid JSON" }, { status: 400 });
+    }
+
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return NextResponse.json({ error: true, message: "Request body must be a JSON object" }, { status: 400 });
+    }
+
+    const queryValue = (body as Record<string, unknown>).query;
+    if (typeof queryValue !== "string") {
+      return NextResponse.json({ error: true, message: "Query must be a string" }, { status: 400 });
+    }
+    const query = queryValue.trim();
+    const previousContextValue = (body as Record<string, unknown>).previous_context;
+    const previousContext = previousContextValue !== null &&
+      typeof previousContextValue === "object" &&
+      !Array.isArray(previousContextValue)
+      ? previousContextValue as Record<string, unknown>
+      : null;
 
     if (!query) {
       return NextResponse.json({ error: true, message: "Query string cannot be empty" }, { status: 400 });

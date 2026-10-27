@@ -56,14 +56,16 @@ Designed with a premium dark mode UI inspired by **Linear**, **Vercel**, and **P
 ### Frontend
 - **Framework**: Next.js 16 (App Router), React 19
 - **Styling**: Tailwind CSS v4, Glassmorphism, CSS variables
-- **Charts & Graphics**: Plotly.js, Recharts, Lucide Icons
+- **Charts & Graphics**: Plotly.js, Lucide Icons
 - **Language**: TypeScript
 
-### Backend
+### Legacy backend
 - **Framework**: FastAPI (Python 3.14)
 - **AI Model**: Groq API (`openai/gpt-oss-120b` by default; override with `GROQ_MODEL`)
 - **Data Engine**: Pandas, NumPy
 - **Visuals Engine**: Plotly Python
+
+The deployed Vercel application runs the same-origin Next.js routes in `frontend/`; the FastAPI backend is a separate legacy path and is not required by the frontend.
 
 ---
 
@@ -82,10 +84,10 @@ MAX_UPLOAD_ROWS=250000
 MAX_UPLOAD_COLUMNS=100
 ```
 
-For a deployed frontend, set `NEXT_PUBLIC_API_URL` to the public backend URL before building.
+For the optional legacy frontend-to-backend setup only, set `NEXT_PUBLIC_API_URL` to the backend URL before building. The deployed Next.js application uses same-origin routes.
 Each browser profile receives a workspace identifier stored locally, so uploaded datasets are isolated from other browser sessions. This is session/workspace isolation, not user authentication; add authentication before treating it as a multi-tenant service.
 
-### 1. Start FastAPI Backend
+### Optional: Start the legacy FastAPI backend
 ```bash
 cd backend
 python -m venv venv
@@ -94,7 +96,7 @@ pip install -r requirements.txt
 python -m uvicorn main:app --reload --port 8000
 ```
 
-### 2. Start Next.js Frontend
+### Start the Next.js frontend
 ```bash
 cd frontend
 npm install
@@ -102,3 +104,5 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+The authenticated document workspace and Q&A flow are documented in [AI_REFERENCE.md](./AI_REFERENCE.md). The Q&A endpoint remains disabled by default until live Supabase and provider verification is complete. See the [mission history index](./docs/mission-history/README.md) and [frontend testing guide](./frontend/TESTING.md) for implementation and verification details.

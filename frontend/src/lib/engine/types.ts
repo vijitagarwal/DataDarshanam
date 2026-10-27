@@ -12,9 +12,18 @@ export interface ParsedQuery {
   title: string;
   x_label: string;
   y_label: string;
-  error?: boolean;
+  error?: false;
   message?: string;
 }
+
+export interface ParsedQueryError {
+  error: true;
+  message: string;
+  code: string;
+  field?: string;
+}
+
+export type ParsedQueryResponse = ParsedQuery | ParsedQueryError;
 
 export interface FilterSpec {
   field: string;
