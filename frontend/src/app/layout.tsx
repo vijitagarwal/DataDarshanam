@@ -13,8 +13,8 @@ const devanagari = Noto_Sans_Devanagari({
 });
 
 export const metadata: Metadata = {
-  title: "dataदर्शनम् — Conversational AI for BI Dashboards",
-  description: "Query business data in plain English. Instant interactive charts and AI insights.",
+  title: "DataDarshanam — Analytics by question",
+  description: "Ask questions about your dataset and review the computed figures, charts, and result rows.",
 };
 
 export default function RootLayout({
@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${devanagari.variable}`}>
+    <html lang="en" className={`${inter.variable} ${devanagari.variable}`}>
       <body className="antialiased min-h-screen">
         {children}
       </body>

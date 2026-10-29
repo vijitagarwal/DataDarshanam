@@ -1,287 +1,405 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { Sidebar } from "@/components/Sidebar";
-import { HeroState } from "@/components/HeroState";
-import { QueryResult } from "@/components/QueryResult";
-import { DashboardView } from "@/components/DashboardView";
-import { ChatInputBar } from "@/components/ChatInputBar";
-import { fetchSchema, postQuery, postDashboardQuery, uploadCSVFile } from "@/lib/api";
-import { SchemaResponse, ChatEntry, SavedChart } from "@/lib/types";
-import { Database, Trash2, Layers, Menu } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Database, History, Moon, Sun } from "lucide-react";
 import { AuthControl } from "@/components/AuthControl";
+import { ChatInputBar } from "@/components/ChatInputBar";
+import { DashboardView } from "@/components/DashboardView";
 import { DocumentManager } from "@/components/DocumentManager";
 import { DocumentQaPanel } from "@/components/DocumentQaPanel";
+import { HeroState } from "@/components/HeroState";
+import { QueryResult } from "@/components/QueryResult";
+import { SavedChartsView } from "@/components/SavedChartsView";
+import { Sidebar, type WorkspacePanel } from "@/components/Sidebar";
+import { fetchSchema, postDashboardQuery, postQuery, selectDemoDataset, uploadCSVFile } from "@/lib/api";
+import type { ChatEntry, SavedChart, SchemaResponse } from "@/lib/types";
 import type { DocumentItem } from "@/lib/documentApi";
 
+type ViewName = "analyze" | "documents" | "charts";
+
+const navigation: { id: ViewName; label: string }[] = [
+  { id: "analyze", label: "Analyze" },
+  { id: "documents", label: "Documents" },
+  { id: "charts", label: "Charts" },
+];
+
 export default function Home() {
+  const [activeView, setActiveView] = useState<ViewName>("analyze");
+  const [openPanel, setOpenPanel] = useState<WorkspacePanel>(null);
   const [schema, setSchema] = useState<SchemaResponse | null>(null);
   const [chatEntries, setChatEntries] = useState<ChatEntry[]>([]);
   const [savedCharts, setSavedCharts] = useState<SavedChart[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [datasetName, setDatasetName] = useState("sales.csv");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [datasetMode, setDatasetMode] = useState<"demo" | "custom">("demo");
+  const [questionDraft, setQuestionDraft] = useState("");
+  const [focusRequest, setFocusRequest] = useState(0);
+  const [darkTheme, setDarkTheme] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
 
-  // Load dataset schema on initial mount
   useEffect(() => {
+    const storedTheme = window.localStorage.getItem("datadarshan-theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setDarkTheme(storedTheme ? storedTheme === "dark" : prefersDark);
+
+    const storedMode = window.localStorage.getItem("datadarshan-dataset-mode");
+    const legacyWorkspace = window.localStorage.getItem("datadarshan-workspace-id");
+    if (storedMode === "custom" || (!storedMode && legacyWorkspace)) {
+      setDatasetMode("custom");
+      setDatasetName("Custom CSV");
+    }
+
+    let active = true;
     fetchSchema()
       .then((data) => {
+        if (!active) return;
         setSchema(data);
         setSchemaError(null);
       })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Unable to connect to the backend API.";
-        console.error("Error fetching schema:", err);
+      .catch((reason: unknown) => {
+        if (!active) return;
+        const message = reason instanceof Error ? reason.message : "Unable to connect to the data service.";
         setSchemaError(message);
+        setStatusMessage(message);
       });
+    return () => { active = false; };
   }, []);
 
-  // Handle natural query execution
-  const handleSendQuery = useCallback(async (queryStr: string) => {
-    if (!queryStr.trim() || isLoading) return;
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkTheme ? "dark" : "light";
+    window.localStorage.setItem("datadarshan-theme", darkTheme ? "dark" : "light");
+  }, [darkTheme]);
+
+  const handleSendQuery = useCallback(async (query: string) => {
+    const normalizedQuery = query.trim();
+    if (!normalizedQuery || isLoading) return;
+    if (!schema) {
+      setStatusMessage(schemaError ?? "Choose a dataset and wait for its schema before asking a question.");
+      return;
+    }
 
     const entryId = `entry-${Date.now()}`;
-    const newEntry: ChatEntry = {
+    setChatEntries((entries) => [...entries, {
       id: entryId,
       type: "query",
-      query: queryStr,
+      query: normalizedQuery,
       isLoading: true,
-    };
-
-    setChatEntries((prev) => [...prev, newEntry]);
+    }]);
+    setStatusMessage(`Working on: ${normalizedQuery}`);
     setIsLoading(true);
 
-    // Get previous context from last successful query if available
-    let previousContext = undefined;
     const lastEntry = chatEntries[chatEntries.length - 1];
-    if (lastEntry?.response?.result && !lastEntry.response.error) {
-      previousContext = lastEntry.response.result;
-    }
+    const previousContext = lastEntry?.response?.result && !lastEntry.response.error
+      ? lastEntry.response.result
+      : undefined;
 
     try {
-      // Check if user requested a full dashboard
-      const isDashboard = queryStr.toLowerCase().includes("dashboard") || queryStr.toLowerCase().includes("overview");
-
+      const isDashboard = /dashboard|overview/i.test(normalizedQuery);
       if (isDashboard) {
-        const dashRes = await postDashboardQuery(queryStr);
-        setChatEntries((prev) =>
-          prev.map((e) =>
-            e.id === entryId
-              ? { ...e, type: "dashboard", dashboardResponse: dashRes, isLoading: false }
-              : e
-          )
-        );
+        const response = await postDashboardQuery(normalizedQuery);
+        setChatEntries((entries) => entries.map((entry) => entry.id === entryId
+          ? { ...entry, type: "dashboard", dashboardResponse: response, isLoading: false }
+          : entry));
       } else {
-        const queryRes = await postQuery(queryStr, previousContext);
-        setChatEntries((prev) =>
-          prev.map((e) =>
-            e.id === entryId
-              ? { ...e, response: queryRes, isLoading: false }
-              : e
-          )
-        );
+        const response = await postQuery(normalizedQuery, previousContext);
+        setChatEntries((entries) => entries.map((entry) => entry.id === entryId
+          ? { ...entry, response, isLoading: false }
+          : entry));
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to process query";
-      setChatEntries((prev) =>
-        prev.map((e) =>
-          e.id === entryId
-            ? {
-                ...e,
-                isLoading: false,
-                response: {
-                  success: false,
-                  error: true,
-                  query: queryStr,
-                  insight: message,
-                  message,
-                },
-              }
-            : e
-        )
-      );
+      setStatusMessage("Question finished.");
+    } catch (reason: unknown) {
+      const message = reason instanceof Error ? reason.message : "The question could not be completed.";
+      setChatEntries((entries) => entries.map((entry) => entry.id === entryId
+        ? {
+            ...entry,
+            isLoading: false,
+            response: {
+              success: false,
+              error: true,
+              query: normalizedQuery,
+              insight: message,
+              message,
+            },
+          }
+        : entry));
+      setStatusMessage(`Question failed: ${message}`);
     } finally {
       setIsLoading(false);
+      window.setTimeout(() => {
+        document.getElementById(entryId)?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+          block: "start",
+        });
+      }, 0);
     }
-  }, [chatEntries, isLoading]);
+  }, [chatEntries, isLoading, schema, schemaError]);
 
-  // Generate full dashboard button handler
-  const handleGenerateDashboard = () => {
-    handleSendQuery("generate full dashboard overview");
-  };
+  const handleGenerateDashboard = () => handleSendQuery("generate full dashboard overview");
 
-  // Clear chat handler
-  const handleNewChat = () => {
+  function handleNewChat() {
+    if (!chatEntries.length) return;
+    if (!window.confirm("Clear all questions and results from this workspace? Saved charts will remain.")) return;
     setChatEntries([]);
-  };
+    setStatusMessage("Question history cleared.");
+  }
 
-  // Save chart handler
-  const handleSaveChart = (savedItem: SavedChart) => {
-    setSavedCharts((prev) => {
-      if (prev.some((s) => s.query === savedItem.query)) return prev;
-      return [...prev, savedItem];
-    });
-  };
+  function handleSaveChart(chart: SavedChart) {
+    setSavedCharts((charts) => charts.some((saved) => saved.query === chart.query)
+      ? charts
+      : [...charts, chart]);
+    setStatusMessage("Chart saved in this browser session.");
+  }
 
-  // Remove saved chart handler
-  const handleRemoveSavedChart = (id: string) => {
-    setSavedCharts((prev) => prev.filter((s) => s.id !== id));
-  };
+  function handleDeleteSavedChart(chart: SavedChart) {
+    if (!window.confirm(`Delete the saved chart “${chart.query}”?`)) return;
+    setSavedCharts((charts) => charts.filter((saved) => saved.id !== chart.id));
+    setStatusMessage("Saved chart deleted.");
+  }
 
-  // CSV upload handler
-  const handleUploadCSV = async (file: File) => {
+  function handleOpenSavedChart(chart: SavedChart) {
+    if (!chart.response) return;
+    const response = chart.response;
+    const id = `restored-${Date.now()}`;
+    setChatEntries((entries) => [...entries, {
+      id,
+      type: "query",
+      query: response.query,
+      response,
+    }]);
+    setActiveView("analyze");
+    setStatusMessage("Saved result opened in Analyze.");
+    window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), 0);
+  }
+
+  async function handleUploadCSV(file: File) {
     setIsUploading(true);
+    setSchemaError(null);
+    setStatusMessage(`Uploading ${file.name}…`);
     try {
       const newSchema = await uploadCSVFile(file);
       setSchema(newSchema);
       setDatasetName(newSchema.filename);
-      setSchemaError(null);
+      setDatasetMode("custom");
       setChatEntries([]);
       setSavedCharts([]);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unable to upload CSV.";
+      setOpenPanel(null);
+      setStatusMessage(`${file.name} uploaded. Its schema is ready for questions.`);
+    } catch (reason: unknown) {
+      const message = reason instanceof Error ? reason.message : "Unable to upload this CSV.";
       setSchemaError(message);
-      alert(`Upload failed: ${message}`);
+      setStatusMessage(`CSV upload failed: ${message}`);
     } finally {
       setIsUploading(false);
     }
-  };
+  }
+
+  async function handleSelectDemoDataset() {
+    selectDemoDataset();
+    setDatasetMode("demo");
+    setDatasetName("sales.csv");
+    setSchemaError(null);
+    setStatusMessage("Loading the bundled demo dataset…");
+    try {
+      const demoSchema = await fetchSchema();
+      setSchema(demoSchema);
+      setChatEntries([]);
+      setSavedCharts([]);
+      setOpenPanel(null);
+      setStatusMessage("Demo dataset selected.");
+    } catch (reason: unknown) {
+      const message = reason instanceof Error ? reason.message : "Unable to load the demo dataset.";
+      setSchema(null);
+      setSchemaError(message);
+      setStatusMessage(message);
+    }
+  }
+
+  function focusHistoryEntry(entryId: string) {
+    setOpenPanel(null);
+    setActiveView("analyze");
+    window.setTimeout(() => document.getElementById(entryId)?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+      block: "start",
+    }), 0);
+  }
 
   const isChatEmpty = chatEntries.length === 0;
+  const selectedNavigation = navigation.find((item) => item.id === activeView);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0a0d14]">
-      {/* Left Sidebar */}
+    <div className="ledger-app">
+      <a className="ledger-skip-link" href="#main-content">Skip to content</a>
+      <header className="ledger-header">
+        <div className="ledger-header-row">
+          <a className="ledger-wordmark" href="#main-content" aria-label="DataDarshanam home">
+            <span>data</span><i aria-hidden="true" /><span lang="hi">दर्शनम्</span>
+          </a>
+          <nav className="ledger-navigation" aria-label="Primary">
+            {navigation.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                aria-current={activeView === item.id ? "page" : undefined}
+                onClick={() => setActiveView(item.id)}
+              >
+                {item.label}{item.id === "charts" && savedCharts.length > 0 ? ` (${savedCharts.length})` : ""}
+              </button>
+            ))}
+          </nav>
+          <div className="ledger-header-tools">
+            <button type="button" className="ledger-button ledger-header-button" onClick={() => setOpenPanel("dataset")}>
+              <Database size={16} aria-hidden="true" /><span className="ledger-tool-label">Dataset</span>
+            </button>
+            <button type="button" className="ledger-button ledger-header-button" onClick={() => setOpenPanel("history")}>
+              <History size={16} aria-hidden="true" /><span className="ledger-tool-label">History</span>
+              {chatEntries.length > 0 && <span className="ledger-count">{chatEntries.length}</span>}
+            </button>
+            <button
+              type="button"
+              className="ledger-icon-button"
+              onClick={() => setDarkTheme((value) => !value)}
+              aria-label={`Switch to ${darkTheme ? "light" : "dark"} theme`}
+              title={`Switch to ${darkTheme ? "light" : "dark"} theme`}
+            >
+              {darkTheme ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
+            </button>
+            <AuthControl />
+          </div>
+        </div>
+        <div className="ledger-header-meta">
+          <span className="ledger-dataset-chip" title={`${datasetName} · ${datasetMode === "demo" ? "Bundled demo dataset" : "Session-only custom data"}`}>
+            <span className="ledger-status-dot" aria-hidden="true" />
+            {datasetMode === "demo" ? "Demo" : "Custom"} · {datasetName} · {schema?.profile.rows.toLocaleString() ?? "—"} rows
+          </span>
+          {schemaError && <span className="ledger-inline-error" role="status">{schemaError}</span>}
+        </div>
+      </header>
+
       <Sidebar
+        panel={openPanel}
         profile={schema?.profile}
+        datasetName={datasetName}
+        datasetMode={datasetMode}
         schemaError={schemaError}
-        savedCharts={savedCharts}
         chatEntries={chatEntries}
-        onNewChat={handleNewChat}
-        onSelectQuery={(q) => handleSendQuery(q)}
-        onRestoreSaved={(response) => {
-          if (!response) return;
-          setChatEntries((prev) => [...prev, { id: `restored-${Date.now()}`, type: "query", query: response.query, response }]);
-        }}
-        onRemoveSavedChart={handleRemoveSavedChart}
+        onSelectEntry={focusHistoryEntry}
         onUploadCSV={handleUploadCSV}
+        onSelectDemoDataset={handleSelectDemoDataset}
         isUploading={isUploading}
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
+        onClose={() => setOpenPanel(null)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d1117] relative">
-        {/* Top Header Bar */}
-        <header className="h-14 border-b border-indigo-500/10 px-4 md:px-6 flex items-center justify-between shrink-0 bg-[#0d1117]/80 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setIsSidebarOpen(true)} aria-label="Open navigation" className="p-1.5 text-slate-400 hover:text-white md:hidden">
-              <Menu className="w-5 h-5" />
-            </button>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
-              <Database className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{datasetName} ({schema?.profile?.rows?.toLocaleString() || "—"} rows)</span>
-            </span>
-          </div>
+      <main id="main-content" className={`ledger-main ${activeView === "analyze" ? "ledger-main-analyze" : ""}`}>
+        <div className="ledger-content">
+          {activeView === "analyze" && (
+            <>
+              <div className="ledger-screen-heading">
+                <div>
+                  <p className="ledger-kicker">Analyze</p>
+                  <h1 className="ledger-page-title">A question, answered with your data.</h1>
+                </div>
+                <div className="ledger-heading-actions">
+                  <button type="button" className="ledger-button" onClick={() => setOpenPanel("history")}>
+                    <History size={15} aria-hidden="true" /> History
+                  </button>
+                  {!isChatEmpty && (
+                    <button type="button" className="ledger-button" onClick={handleNewChat}>Clear questions</button>
+                  )}
+                </div>
+              </div>
+              {schemaError && (
+                <p className="ledger-message ledger-message-error" role="alert">
+                  {schemaError} Select the demo dataset or upload a CSV from Dataset details to continue.
+                </p>
+              )}
+              {isChatEmpty ? (
+                <HeroState
+                  suggestedQuestions={schema?.suggested_questions}
+                  onSelectQuestion={handleSendQuery}
+                  onGenerateDashboard={handleGenerateDashboard}
+                />
+              ) : (
+                <div className="ledger-results" aria-label="Question results">
+                  {chatEntries.map((entry, index) => {
+                    if (entry.isLoading) {
+                      return (
+                        <article id={entry.id} className="ledger-result" key={entry.id} aria-label={`Question: ${entry.query}`}>
+                          <p className="ledger-question">{entry.query}</p>
+                          <div className="ledger-loading" role="status" aria-live="polite">
+                            <span className="ledger-loading-indicator" aria-hidden="true" />
+                            Preparing your briefing…
+                          </div>
+                        </article>
+                      );
+                    }
+                    if (entry.type === "dashboard" && entry.dashboardResponse) {
+                      return <DashboardView key={entry.id} entryId={entry.id} response={entry.dashboardResponse} isDark={darkTheme} />;
+                    }
+                    if (entry.response) {
+                      return (
+                        <QueryResult
+                          key={entry.id}
+                          entryId={entry.id}
+                          entryIndex={index}
+                          response={entry.response}
+                          onSaveChart={handleSaveChart}
+                          isSaved={savedCharts.some((chart) => chart.query === entry.query)}
+                          onRetry={handleSendQuery}
+                          onEdit={(query) => {
+                            setQuestionDraft(query);
+                            setFocusRequest((request) => request + 1);
+                          }}
+                          isDark={darkTheme}
+                        />
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+              )}
+            </>
+          )}
 
-          <div className="flex items-center gap-3">
-            <AuthControl />
-            {!isChatEmpty && (
-              <>
-                <button
-                  onClick={handleGenerateDashboard}
-                  className="btn-primary text-xs px-3 py-1.5 inline-flex items-center gap-1.5"
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>Full Dashboard</span>
-                </button>
+          {activeView === "charts" && (
+            <SavedChartsView charts={savedCharts} onOpen={handleOpenSavedChart} onDelete={handleDeleteSavedChart} />
+          )}
 
-                <button
-                  onClick={handleNewChat}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/60 border border-indigo-500/10 transition-colors text-xs flex items-center gap-1"
-                  title="Clear Chat"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Clear</span>
-                </button>
-              </>
-            )}
-          </div>
-        </header>
-
-        {/* Scrollable Conversation Workspace */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-          <div className="mx-auto w-full max-w-5xl space-y-4">
-            <DocumentManager
-              onDocumentsChange={setDocuments}
-              onLoadingChange={setDocumentsLoading}
-              onErrorChange={setDocumentsError}
-            />
-            <DocumentQaPanel
-              documents={documents}
-              documentsLoading={documentsLoading}
-              documentsError={documentsError}
-            />
-          </div>
-          {isChatEmpty ? (
-            <HeroState
-              suggestedQuestions={schema?.suggested_questions}
-              onSelectQuestion={handleSendQuery}
-              onGenerateDashboard={handleGenerateDashboard}
-            />
-          ) : (
-            <div className="max-w-5xl mx-auto space-y-8">
-              {chatEntries.map((entry, idx) => {
-                if (entry.isLoading) {
-                  return (
-                    <div key={entry.id} className="w-full space-y-3 animate-pulse">
-                      <div className="flex justify-end">
-                        <div className="bg-indigo-600/30 text-indigo-200 px-4 py-2 rounded-xl text-sm font-medium">
-                          {entry.query}
-                        </div>
-                      </div>
-                      <div className="glass-card p-6 flex flex-col gap-3">
-                        <div className="h-4 w-48 skeleton-shimmer" />
-                        <div className="h-64 w-full skeleton-shimmer" />
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (entry.type === "dashboard" && entry.dashboardResponse) {
-                  return <DashboardView key={entry.id} response={entry.dashboardResponse} />;
-                }
-
-                if (entry.response) {
-                  return (
-                    <QueryResult
-                      key={entry.id}
-                      entryIndex={idx}
-                      response={entry.response}
-                      onSaveChart={handleSaveChart}
-                      isSaved={savedCharts.some((s) => s.query === entry.query)}
-                    />
-                  );
-                }
-
-                return null;
-              })}
-            </div>
+          {activeView === "documents" && (
+            <section className="ledger-screen" aria-labelledby="documents-heading">
+              <p className="ledger-kicker">Private library</p>
+              <h1 id="documents-heading" className="ledger-page-title">Documents</h1>
+              <p className="ledger-lede">
+                Upload and ask questions about documents available to your signed-in account. Answers and citations come from the document service, never from sample passages.
+              </p>
+              <p className="ledger-private-note">Private document features require authentication. The library and question panel report service configuration and request status directly.</p>
+              <DocumentManager
+                onDocumentsChange={setDocuments}
+                onLoadingChange={setDocumentsLoading}
+                onErrorChange={setDocumentsError}
+              />
+              <DocumentQaPanel documents={documents} documentsLoading={documentsLoading} documentsError={documentsError} />
+            </section>
           )}
         </div>
+      </main>
 
-        {/* Sticky Floating Chat Input */}
+      {activeView === "analyze" && (
         <ChatInputBar
           onSend={handleSendQuery}
           isLoading={isLoading}
           suggestedQuestions={schema?.suggested_questions}
+          value={questionDraft}
+          onChange={setQuestionDraft}
+          focusRequest={focusRequest}
         />
-      </main>
+      )}
+      <p className="ledger-live-region" role="status" aria-live="polite" aria-atomic="true">{statusMessage}</p>
+      <span className="sr-only">{selectedNavigation?.label} view</span>
     </div>
   );
 }

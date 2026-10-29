@@ -46,12 +46,13 @@ const result = {
   summary: { total: 100, average: 100, max_value: 100, max_label: "Books", row_count: 1 },
 };
 
-function request(body: string, workspaceId?: string) {
+function request(body: string, workspaceId?: string, datasetMode?: "demo" | "custom") {
   return new NextRequest("http://localhost/api/query", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(workspaceId ? { "X-Workspace-ID": workspaceId } : {}),
+      ...(datasetMode ? { "X-Dataset-Mode": datasetMode } : {}),
     },
     body,
   });
@@ -95,14 +96,68 @@ describe("POST /api/query", () => {
     expect(mocks.generateInsight).toHaveBeenCalledWith("show revenue by category", result);
   });
 
-  it("uses the default dataset when the workspace has no dataset", async () => {
+  it("preserves the legacy demo selection when no workspace is supplied", async () => {
     mocks.getDataset.mockReturnValue(null);
     const response = await POST(request(JSON.stringify({ query: "show revenue" })));
 
     expect(response.status).toBe(200);
-    expect(mocks.getDataset).toHaveBeenCalledWith("default");
+    expect(mocks.getDataset).not.toHaveBeenCalled();
     expect(mocks.loadDefaultData).toHaveBeenCalledOnce();
     expect(mocks.parseQuery).toHaveBeenCalledWith("show revenue", rows, null);
+  });
+
+  it("uses the bundled dataset only when demo mode is explicit", async () => {
+    const response = await POST(request(JSON.stringify({ query: "show revenue" }), undefined, "demo"));
+
+    expect(response.status).toBe(200);
+    expect(mocks.loadDefaultData).toHaveBeenCalledOnce();
+    expect(mocks.getDataset).not.toHaveBeenCalled();
+    expect(mocks.parseQuery).toHaveBeenCalledWith("show revenue", rows, null);
+  });
+
+  it("rejects a custom selection when its workspace ID is absent", async () => {
+    const response = await POST(request(JSON.stringify({ query: "show revenue" }), undefined, "custom"));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "INVALID_DATASET_SELECTION",
+      error: "A valid workspace ID is required for a custom dataset.",
+    });
+    expect(mocks.loadDefaultData).not.toHaveBeenCalled();
+    expect(mocks.parseQuery).not.toHaveBeenCalled();
+  });
+
+  it.each(["stale-workspace-123", "unknown-workspace-123"])(
+    "does not substitute demo data for missing custom workspace %s",
+    async (workspaceId) => {
+      mocks.getDataset.mockReturnValue(null);
+      const response = await POST(request(
+        JSON.stringify({ query: "show revenue" }),
+        workspaceId,
+        "custom",
+      ));
+
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        code: "DATASET_NOT_FOUND",
+        error: "The selected custom dataset is unavailable. Upload it again or explicitly select the demo dataset.",
+      });
+      expect(mocks.getDataset).toHaveBeenCalledWith(workspaceId);
+      expect(mocks.loadDefaultData).not.toHaveBeenCalled();
+      expect(mocks.parseQuery).not.toHaveBeenCalled();
+    },
+  );
+
+  it("treats a legacy unknown workspace as custom instead of falling back to demo", async () => {
+    mocks.getDataset.mockReturnValue(null);
+    const response = await POST(request(
+      JSON.stringify({ query: "show revenue" }),
+      "legacy-workspace-123",
+    ));
+
+    expect(response.status).toBe(404);
+    expect(mocks.loadDefaultData).not.toHaveBeenCalled();
+    expect(mocks.parseQuery).not.toHaveBeenCalled();
   });
 
   it("returns 400 for malformed JSON and invalid request bodies", async () => {

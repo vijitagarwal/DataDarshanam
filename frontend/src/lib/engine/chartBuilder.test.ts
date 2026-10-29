@@ -30,13 +30,13 @@ describe("chart specification generation", () => {
     });
     expect(spec.layout).toMatchObject({
       title: { text: "Revenue by category" },
-      paper_bgcolor: "#0F172A",
+      paper_bgcolor: "#15221F",
     });
   });
 
   it("uses a light theme when requested", () => {
     const spec = buildChart(result, false) as { layout: Record<string, unknown> };
 
-    expect(spec.layout).toMatchObject({ paper_bgcolor: "#F8FAFC" });
+    expect(spec.layout).toMatchObject({ paper_bgcolor: "#EEF3F1" });
   });
 });

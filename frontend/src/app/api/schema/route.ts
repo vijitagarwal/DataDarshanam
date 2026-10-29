@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDataset, loadDefaultData, getDatasetProfile, suggestQuestions } from "@/lib/engine/dataEngine";
+import { getDatasetProfile, suggestQuestions } from "@/lib/engine/dataEngine";
+import { DatasetSelectionError, resolveRequestDataset } from "@/lib/engine/datasetSelection";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-function getWorkspaceId(req: NextRequest): string {
-  const id = req.headers.get("X-Workspace-ID") ?? "default";
-  return /^[A-Za-z0-9_-]{8,64}$/.test(id) ? id : "default";
-}
-
 export async function GET(req: NextRequest) {
   try {
-    const workspaceId = getWorkspaceId(req);
-    let rows = getDataset(workspaceId);
-    if (!rows) rows = await loadDefaultData();
+    const { rows } = await resolveRequestDataset(req);
 
     const profile = getDatasetProfile(rows);
     const suggested = suggestQuestions(rows, 5);
     return NextResponse.json({ profile, suggested_questions: suggested });
   } catch (e) {
+    if (e instanceof DatasetSelectionError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json({ error: "Unable to load dataset schema" }, { status: 500 });
   }

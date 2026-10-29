@@ -85,7 +85,7 @@ MAX_UPLOAD_COLUMNS=100
 ```
 
 For the optional legacy frontend-to-backend setup only, set `NEXT_PUBLIC_API_URL` to the backend URL before building. The deployed Next.js application uses same-origin routes.
-Each browser profile receives a workspace identifier stored locally, so uploaded datasets are isolated from other browser sessions. This is session/workspace isolation, not user authentication; add authentication before treating it as a multi-tenant service.
+The browser stores a workspace identifier and an explicit demo/custom dataset selection. If a selected custom dataset is unavailable, the API returns an error instead of substituting the bundled demo CSV. Custom uploads are still held only in server-process memory and may not be available across serverless instances or restarts; workspace IDs are not authentication or a multi-tenant security boundary.
 
 ### Optional: Start the legacy FastAPI backend
 ```bash

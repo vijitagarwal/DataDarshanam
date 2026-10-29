@@ -18,7 +18,7 @@ describe("deterministic insight fallback", () => {
     vi.stubEnv("GROQ_API_KEY", "");
 
     await expect(generateInsight("Show revenue by category", result)).resolves.toEqual({
-      insight: "Top performer: Beauty with $5,550,625 in revenue.",
+      insight: "Top performer: Beauty with 5,550,625 in revenue.",
       fallback: true,
     });
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDataset, loadDefaultData, buildOverviewQueries } from "@/lib/engine/dataEngine";
+import { buildOverviewQueries } from "@/lib/engine/dataEngine";
+import { DatasetSelectionError, resolveRequestDataset } from "@/lib/engine/datasetSelection";
 import { parseDashboardQuery } from "@/lib/engine/llmParser";
 import { runQuery } from "@/lib/engine/dataEngine";
 import { buildChart } from "@/lib/engine/chartBuilder";
@@ -8,19 +9,12 @@ import { ParsedQuery } from "@/lib/engine/types";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function getWorkspaceId(req: NextRequest): string {
-  const id = req.headers.get("X-Workspace-ID") ?? "default";
-  return /^[A-Za-z0-9_-]{8,64}$/.test(id) ? id : "default";
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const query: string = (body.query ?? "generate full dashboard overview").trim();
 
-    const workspaceId = getWorkspaceId(req);
-    let rows = getDataset(workspaceId);
-    if (!rows) rows = await loadDefaultData();
+    const { rows } = await resolveRequestDataset(req);
 
     let dashboardQueries: ParsedQuery[] | null = await parseDashboardQuery(query, rows);
 
@@ -48,6 +42,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, query, charts });
   } catch (e) {
+    if (e instanceof DatasetSelectionError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json({ error: "Dashboard generation failed" }, { status: 500 });
   }

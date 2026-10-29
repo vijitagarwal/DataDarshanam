@@ -16,11 +16,15 @@ const TIME_COLUMNS = new Set(["year", "month", "month_name", "quarter"]);
 const TIME_DIMS = new Set(["year", "month", "quarter"]);
 
 // ---------------------------------------------------------------------------
-// In-memory dataset store (per-workspace, per-process)
-// Note: Vercel serverless functions may restart; this is acceptable for demos.
+// Process-local storage lets isolated Next.js route bundles share uploaded
+// datasets during a running instance. It is intentionally not durable.
 // ---------------------------------------------------------------------------
 
-const _datasets: Map<string, DataRow[]> = new Map();
+const processGlobal = globalThis as typeof globalThis & {
+  __datadarshanamDatasets?: Map<string, DataRow[]>;
+};
+const _datasets = processGlobal.__datadarshanamDatasets ?? new Map<string, DataRow[]>();
+processGlobal.__datadarshanamDatasets = _datasets;
 let _defaultData: DataRow[] | null = null;
 
 // ---------------------------------------------------------------------------
@@ -140,12 +144,11 @@ export async function loadDefaultData(): Promise<DataRow[]> {
   }
 
   _defaultData = enrichWithDates(parseCSV(text));
-  _datasets.set("default", _defaultData);
   return _defaultData;
 }
 
 export function getDataset(workspaceId: string): DataRow[] | null {
-  return _datasets.get(workspaceId) ?? _datasets.get("default") ?? null;
+  return _datasets.get(workspaceId) ?? null;
 }
 
 export function setDataset(workspaceId: string, rows: DataRow[]): void {

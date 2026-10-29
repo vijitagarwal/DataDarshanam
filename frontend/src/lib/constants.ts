@@ -1,3 +1,6 @@
+export const DATASET_MODE_HEADER = "X-Dataset-Mode";
+export const WORKSPACE_ID_HEADER = "X-Workspace-ID";
+
 export const CHART_COLORS = [
   "#4F46E5", // indigo
   "#10B981", // emerald

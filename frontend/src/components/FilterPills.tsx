@@ -20,14 +20,12 @@ export const FilterPills: React.FC<FilterPillsProps> = ({ filters }) => {
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5 mb-3">
-      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mr-1">
-        Active Filters:
-      </span>
+    <div className="flex flex-wrap items-center gap-1.5 mb-3" aria-label="Applied query filters">
+      <span className="ledger-kicker">Filters</span>
       {filters.map((f, i) => (
         <span
           key={i}
-          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-500/10 text-pink-300 border border-pink-500/25"
+          className="ledger-tag"
         >
           {getIcon(f.field)}
           <span>

@@ -1,68 +1,65 @@
 "use client";
 
 import React from "react";
-import { DashboardResponse } from "@/lib/types";
+import type { DashboardResponse } from "@/lib/types";
 import { ChartView } from "./ChartView";
 import { LayoutGrid } from "lucide-react";
+import { KpiTiles } from "./KpiTiles";
+import { ResultTable } from "./ResultTable";
 
 interface DashboardViewProps {
   response: DashboardResponse;
+  entryId?: string;
+  isDark?: boolean;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ response }) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ response, entryId, isDark = true }) => {
   const query = response.query;
   const charts = response.charts || [];
 
   return (
-    <div className="w-full mb-8 animate-fadeIn">
+    <article id={entryId} className="ledger-result" aria-label={`Dataset overview: ${query}`}>
       {/* User Query Bubble */}
-      <div className="flex justify-end mb-4">
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 max-w-[80%] text-sm font-medium shadow-lg shadow-indigo-500/20">
-          {query}
-        </div>
-      </div>
+      <p className="ledger-question">{query}</p>
 
       {/* Dashboard Section Header */}
-      <div className="glass-card p-3.5 mb-4 flex items-center justify-between border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/20 to-slate-900">
-        <div className="flex items-center gap-2 text-slate-100 font-bold text-base">
-          <LayoutGrid className="w-5 h-5 text-indigo-400" />
-          <span>Full Dataset Overview Dashboard</span>
+      <div className="ledger-figure-heading">
+        <div>
+          <p className="ledger-kicker"><LayoutGrid size={15} aria-hidden="true" /> Dataset overview</p>
+          <h2 className="ledger-page-title">Overview</h2>
         </div>
-        <span className="text-xs text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 rounded-full font-medium">
-          3-Chart Analysis
-        </span>
+        <span className="ledger-tag">{charts.length} charts returned</span>
       </div>
 
-      {/* Grid of Mini Chart Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        {charts.slice(0, 2).map((item, idx) => (
-          <div key={idx} className="glass-card p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-2 pb-2 border-b border-indigo-500/10">
-              <span className="text-xs font-bold text-slate-200 capitalize">
-                {item.parsed?.title || item.result?.metric?.replace(/_/g, " ")}
-              </span>
-              <span className="text-[11px] font-semibold text-indigo-400">
-                Total: {item.result?.summary?.total?.toLocaleString()}
-              </span>
+      <div className="ledger-dashboard-results">
+        {charts.map((item, index) => (
+          <section className="ledger-dashboard-chart" key={`${item.parsed.title}-${index}`}>
+            <div className="ledger-figure-heading">
+              <div>
+                <p className="ledger-kicker">Chart {index + 1}</p>
+                <h3>{item.parsed.title || item.result.metric.replace(/_/g, " ")}</h3>
+              </div>
             </div>
-            <ChartView result={item.result} plotlySpec={item.plotly_spec} />
-          </div>
+            {item.result.data.length > 0 && (
+              <>
+                <p className="ledger-computed-label"><span aria-hidden="true">●</span> Figures computed from rows</p>
+                <KpiTiles summary={item.result.summary} metric={item.result.metric} />
+                <ChartView result={item.result} plotlySpec={item.plotly_spec} isDark={isDark} />
+                <ResultTable rows={item.result.data} question={query} />
+              </>
+            )}
+            {item.result.error && (
+              <p className="ledger-message ledger-message-error" role="alert">
+                {item.result.message || "This chart could not be computed."}
+              </p>
+            )}
+            {!item.result.error && item.result.data.length === 0 && (
+              <p className="ledger-empty-note">No result rows were returned for this chart.</p>
+            )}
+          </section>
         ))}
+        {charts.length === 0 && <p className="ledger-empty-note">The dashboard service returned no charts.</p>}
       </div>
-
-      {charts.length >= 3 && (
-        <div className="glass-card p-4">
-          <div className="flex items-center justify-between mb-2 pb-2 border-b border-indigo-500/10">
-            <span className="text-xs font-bold text-slate-200 capitalize">
-              {charts[2].parsed?.title || charts[2].result?.metric?.replace(/_/g, " ")}
-            </span>
-            <span className="text-[11px] font-semibold text-indigo-400">
-              Top: {charts[2].result?.summary?.max_label || "—"} ({charts[2].result?.summary?.max_value?.toLocaleString()})
-            </span>
-          </div>
-          <ChartView result={charts[2].result} plotlySpec={charts[2].plotly_spec} />
-        </div>
-      )}
-    </div>
+    </article>
   );
 };

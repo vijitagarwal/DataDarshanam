@@ -32,8 +32,7 @@ function fallbackInsight(result: QueryResult): string {
   const maxValue = summary.max_value ?? 0;
   const rawMetric = result.metric ?? "value";
   const metric = rawMetric.replace(/_/g, " ");
-  const prefix = /revenue|price|cost|amount/.test(rawMetric) ? "$" : "";
-  return `Top performer: ${maxLabel} with ${prefix}${maxValue.toLocaleString(undefined, { maximumFractionDigits: 0 })} in ${metric}.`;
+  return `Top performer: ${maxLabel} with ${maxValue.toLocaleString(undefined, { maximumFractionDigits: 0 })} in ${metric}.`;
 }
 
 export async function generateInsight(userQuery: string, result: QueryResult): Promise<{ insight: string; fallback: boolean }> {

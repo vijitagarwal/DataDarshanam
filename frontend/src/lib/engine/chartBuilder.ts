@@ -10,26 +10,26 @@ import { QueryResult } from "./types";
 // Design tokens
 // ---------------------------------------------------------------------------
 
-const PALETTE = ["#6366F1", "#8B5CF6", "#EC4899", "#F59E0B", "#10B981", "#3B82F6"];
+const PALETTE = ["#D98E04", "#0B5D56", "#4D817A", "#AA6E12", "#2F7770", "#8B6221"];
 
 const DARK = {
-  bg: "#0F172A",
-  paper: "#0F172A",
-  hover: "#1E293B",
-  font: "#FFFFFF",
-  grid: "rgba(255,255,255,0.08)",
+  bg: "#15221F",
+  paper: "#15221F",
+  hover: "#20302B",
+  font: "#E8F0ED",
+  grid: "rgba(232,240,237,0.12)",
 };
 
 const LIGHT = {
-  bg: "#FFFFFF",
-  paper: "#F8FAFC",
-  hover: "#F1F5F9",
-  font: "#0F172A",
-  grid: "#E2E8F0",
+  bg: "#FBFDFC",
+  paper: "#EEF3F1",
+  hover: "#E6EEEA",
+  font: "#13201E",
+  grid: "#CDD8D4",
 };
 
 const CONTINUOUS_SCALE = [
-  [0.0, "#1E1B4B"], [0.33, "#6366F1"], [0.66, "#8B5CF6"], [1.0, "#EC4899"],
+  [0.0, "#DDE9E4"], [0.33, "#8CB5AA"], [0.66, "#D98E04"], [1.0, "#0B5D56"],
 ];
 
 const CHART_HEIGHT = 420;

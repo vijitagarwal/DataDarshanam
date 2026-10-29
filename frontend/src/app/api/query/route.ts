@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDataset, loadDefaultData } from "@/lib/engine/dataEngine";
+import { DatasetSelectionError, resolveRequestDataset } from "@/lib/engine/datasetSelection";
 import { parseQuery } from "@/lib/engine/llmParser";
 import { runQuery } from "@/lib/engine/dataEngine";
 import { buildChart } from "@/lib/engine/chartBuilder";
@@ -7,11 +7,6 @@ import { generateInsight } from "@/lib/engine/insightGen";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-function getWorkspaceId(req: NextRequest): string {
-  const id = req.headers.get("X-Workspace-ID") ?? "default";
-  return /^[A-Za-z0-9_-]{8,64}$/.test(id) ? id : "default";
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,9 +37,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: true, message: "Query string cannot be empty" }, { status: 400 });
     }
 
-    const workspaceId = getWorkspaceId(req);
-    let rows = getDataset(workspaceId);
-    if (!rows) rows = await loadDefaultData();
+    let rows;
+    try {
+      ({ rows } = await resolveRequestDataset(req));
+    } catch (e) {
+      if (e instanceof DatasetSelectionError) {
+        return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
+      }
+      throw e;
+    }
 
     // Parse query via LLM
     const parsed = await parseQuery(query, rows, previousContext);

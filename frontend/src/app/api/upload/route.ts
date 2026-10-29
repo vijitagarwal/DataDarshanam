@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { setDataset, getDatasetProfile, suggestQuestions, loadFromCSVText } from "@/lib/engine/dataEngine";
+import { isValidWorkspaceId, WORKSPACE_ID_HEADER } from "@/lib/engine/datasetSelection";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -7,11 +8,6 @@ export const maxDuration = 30;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
 const MAX_UPLOAD_ROWS = 250_000;
 const MAX_UPLOAD_COLUMNS = 100;
-
-function getWorkspaceId(req: NextRequest): string {
-  const id = req.headers.get("X-Workspace-ID") ?? "default";
-  return /^[A-Za-z0-9_-]{8,64}$/.test(id) ? id : "default";
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,7 +38,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `CSV file exceeds the ${MAX_UPLOAD_COLUMNS} column limit` }, { status: 413 });
     }
 
-    const workspaceId = getWorkspaceId(req);
+    const workspaceId = req.headers.get(WORKSPACE_ID_HEADER);
+    if (!workspaceId || !isValidWorkspaceId(workspaceId)) {
+      return NextResponse.json({
+        error: "A valid workspace ID is required to upload a custom dataset.",
+        code: "INVALID_DATASET_SELECTION",
+      }, { status: 400 });
+    }
     setDataset(workspaceId, rows);
 
     const profile = getDatasetProfile(rows);
