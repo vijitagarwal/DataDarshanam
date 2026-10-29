@@ -161,27 +161,26 @@ button:disabled {
   gap: 20px;
 }
 
-.ledger-wordmark {
-  display: inline-flex;
+.ledger-brand-link {
+  display: flex;
   align-items: center;
-  gap: 9px;
   flex: 0 0 auto;
-  color: var(--ledger-ink);
-  font-family: var(--font-editorial);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.04em;
   text-decoration: none;
 }
 
-.ledger-wordmark i {
-  width: 2px;
-  height: 21px;
-  background: var(--ledger-saffron);
+.ledger-brand-responsive {
+  display: flex;
+  align-items: center;
 }
 
-.ledger-wordmark [lang="hi"] {
-  font-family: var(--font-devanagari), var(--font-editorial), serif;
+.ledger-brand-lockup {
+  display: block;
+  width: clamp(144px, 17vw, 174px);
+  height: auto;
+}
+
+.ledger-brand-mark {
+  display: none;
 }
 
 .ledger-navigation {
@@ -898,6 +897,11 @@ button:disabled {
   margin-bottom: 15px;
 }
 
+.ledger-auth-brand {
+  width: min(184px, 100%);
+  margin-bottom: 14px;
+}
+
 .ledger-auth-dialog-heading h2 {
   margin: 0;
   font-family: var(--font-editorial);
@@ -922,6 +926,10 @@ button:disabled {
   padding: 7px 9px;
   color: var(--ledger-ink);
   font-size: 14px;
+}
+
+.ledger-auth-dialog .ledger-auth-input {
+  margin-top: 4px;
 }
 
 .ledger-auth-dialog .ledger-caption {
@@ -1238,8 +1246,8 @@ button:disabled {
     padding-top: 6px;
   }
 
-  .ledger-wordmark {
-    font-size: 20px;
+  .ledger-brand-lockup {
+    width: clamp(132px, 19vw, 154px);
   }
 
   .ledger-navigation {
@@ -1313,9 +1321,14 @@ button:disabled {
     margin-left: auto;
   }
 
-  .ledger-wordmark {
-    gap: 6px;
-    font-size: 18px;
+  .ledger-brand-lockup {
+    display: none;
+  }
+
+  .ledger-brand-mark {
+    display: block;
+    width: 35px;
+    height: 35px;
   }
 
   .ledger-header-tools .ledger-button {

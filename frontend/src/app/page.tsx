@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Database, History, Moon, Sun } from "lucide-react";
 import { AuthControl } from "@/components/AuthControl";
+import { BrandLockup } from "@/components/BrandLockup";
 import { ChatInputBar } from "@/components/ChatInputBar";
 import { DashboardView } from "@/components/DashboardView";
 import { DocumentManager } from "@/components/DocumentManager";
@@ -236,8 +237,8 @@ export default function Home() {
       <a className="ledger-skip-link" href="#main-content">Skip to content</a>
       <header className="ledger-header">
         <div className="ledger-header-row">
-          <a className="ledger-wordmark" href="#main-content" aria-label="DataDarshanam home">
-            <span>data</span><i aria-hidden="true" /><span lang="hi">दर्शनम्</span>
+          <a className="ledger-brand-link" href="#main-content" aria-label="DataDarshanam home">
+            <BrandLockup isDark={darkTheme} responsive />
           </a>
           <nav className="ledger-navigation" aria-label="Primary">
             {navigation.map((item) => (
@@ -268,7 +269,7 @@ export default function Home() {
             >
               {darkTheme ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
             </button>
-            <AuthControl />
+            <AuthControl isDark={darkTheme} />
           </div>
         </div>
         <div className="ledger-header-meta">

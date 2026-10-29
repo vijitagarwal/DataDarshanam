@@ -3,9 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { BrandLockup } from "@/components/BrandLockup";
 import { X } from "lucide-react";
 
-export function AuthControl() {
+interface AuthControlProps {
+  isDark: boolean;
+}
+
+export function AuthControl({ isDark }: AuthControlProps) {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -112,7 +117,10 @@ export function AuthControl() {
         onClose={() => setOpen(false)}
       >
         <div className="ledger-auth-dialog-heading">
-          <h2 id="sign-in-heading">Sign in to your account</h2>
+          <div>
+            <BrandLockup isDark={isDark} className="ledger-auth-brand" />
+            <h2 id="sign-in-heading">Sign in to your account</h2>
+          </div>
           <button type="button" className="ledger-icon-button" onClick={() => setOpen(false)} aria-label="Close sign-in dialog">
             <X size={17} aria-hidden="true" />
           </button>
@@ -120,11 +128,11 @@ export function AuthControl() {
         <form onSubmit={signIn}>
           <label className="mb-2 block text-xs text-slate-400">
             Email
-            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2.5 py-2 text-sm text-white outline-none focus:border-indigo-400" />
+            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="ledger-auth-input" />
           </label>
           <label className="mb-3 block text-xs text-slate-400">
             Password
-            <input required type="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2.5 py-2 text-sm text-white outline-none focus:border-indigo-400" />
+            <input required type="password" minLength={6} value={password} onChange={(event) => setPassword(event.target.value)} className="ledger-auth-input" />
           </label>
           {message && <p role="alert" className="mb-2 text-xs text-rose-300">{message}</p>}
           <button type="submit" disabled={busy} className="ledger-button ledger-button-primary w-full">
