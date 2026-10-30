@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  getDataset,
   getDatasetProfile,
   loadFromCSVText,
   runQuery,
-  setDataset,
   suggestQuestions,
 } from "./dataEngine";
 import type { DataRow, ParsedQuery } from "./types";
@@ -31,16 +29,6 @@ const rows: DataRow[] = [
 ];
 
 describe("CSV loading and profiling", () => {
-  it("looks up custom datasets exactly without substituting another workspace", () => {
-    const workspaceId = `dataset-test-${Date.now()}`;
-    const customRows = [{ product: "Laptop", revenue: 2700 }];
-    setDataset(workspaceId, customRows);
-
-    expect(getDataset(workspaceId)).toEqual(customRows);
-    expect(getDataset(`${workspaceId}-stale`)).toBeNull();
-    expect(getDataset("default")).toBeNull();
-  });
-
   it("parses quoted commas, numbers, and null markers", () => {
     const parsed = loadFromCSVText(
       'category,revenue,note\n"Home, Kitchen",12.5,"good, value"\nBooks,NA,""\n',

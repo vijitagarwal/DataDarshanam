@@ -1,14 +1,20 @@
-import { getDataset, loadDefaultData } from "./dataEngine";
-import { DATASET_MODE_HEADER, WORKSPACE_ID_HEADER } from "../constants";
+import { loadDefaultData } from "./dataEngine";
+import { DATASET_ID_HEADER, DATASET_MODE_HEADER } from "../constants";
+import { authenticateRequest } from "@/lib/supabase/auth";
+import { DatasetStoreError, loadUserDatasetRows } from "@/lib/supabase/datasets";
 import type { DataRow } from "./types";
 
-export { DATASET_MODE_HEADER, WORKSPACE_ID_HEADER } from "../constants";
+export { DATASET_ID_HEADER, DATASET_MODE_HEADER } from "../constants";
 
-const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
+const DATASET_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class DatasetSelectionError extends Error {
   constructor(
-    public readonly code: "INVALID_DATASET_SELECTION" | "DATASET_NOT_FOUND",
+    public readonly code:
+      | "INVALID_DATASET_SELECTION"
+      | "DATASET_NOT_FOUND"
+      | "DATASET_UNAVAILABLE"
+      | "UNAUTHENTICATED",
     message: string,
     public readonly status: number,
   ) {
@@ -17,16 +23,18 @@ export class DatasetSelectionError extends Error {
   }
 }
 
-export function isValidWorkspaceId(value: string): boolean {
-  return WORKSPACE_ID_PATTERN.test(value) && value !== "default";
+export function isValidDatasetId(value: string): boolean {
+  return DATASET_ID_PATTERN.test(value);
 }
 
 export async function resolveRequestDataset(request: Request): Promise<{
   rows: DataRow[];
   mode: "demo" | "custom";
+  dataset?: { id: string; original_filename: string };
 }> {
   const requestedMode = request.headers.get(DATASET_MODE_HEADER);
-  const workspaceId = request.headers.get(WORKSPACE_ID_HEADER);
+  const datasetId = request.headers.get(DATASET_ID_HEADER);
+  const legacyWorkspaceId = request.headers.get("X-Workspace-ID");
 
   if (requestedMode !== null && requestedMode !== "demo" && requestedMode !== "custom") {
     throw new DatasetSelectionError(
@@ -36,29 +44,47 @@ export async function resolveRequestDataset(request: Request): Promise<{
     );
   }
 
-  // Legacy requests without a workspace selected the bundled dataset. A
-  // supplied non-default workspace is treated as a custom-dataset selection.
-  const mode = requestedMode ?? (workspaceId && workspaceId !== "default" ? "custom" : "demo");
+  const mode = requestedMode ?? (datasetId || legacyWorkspaceId ? "custom" : "demo");
   if (mode === "demo") {
     return { rows: await loadDefaultData(), mode };
   }
 
-  if (!workspaceId || !isValidWorkspaceId(workspaceId)) {
+  if (!datasetId || !isValidDatasetId(datasetId)) {
     throw new DatasetSelectionError(
-      "INVALID_DATASET_SELECTION",
-      "A valid workspace ID is required for a custom dataset.",
-      400,
+      datasetId ? "INVALID_DATASET_SELECTION" : "DATASET_NOT_FOUND",
+      "The selected custom dataset is unavailable. Select a saved dataset, upload a CSV, or explicitly select the demo dataset.",
+      datasetId ? 400 : 404,
     );
   }
 
-  const rows = getDataset(workspaceId);
-  if (!rows) {
+  const auth = await authenticateRequest(request);
+  if ("error" in auth) {
     throw new DatasetSelectionError(
-      "DATASET_NOT_FOUND",
-      "The selected custom dataset is unavailable. Upload it again or explicitly select the demo dataset.",
-      404,
+      "UNAUTHENTICATED",
+      auth.message,
+      401,
     );
   }
 
-  return { rows, mode };
+  try {
+    const stored = await loadUserDatasetRows(auth.user.id, datasetId);
+    if (!stored) {
+      throw new DatasetSelectionError(
+        "DATASET_NOT_FOUND",
+        "The selected custom dataset is unavailable. Select a saved dataset, upload a CSV, or explicitly select the demo dataset.",
+        404,
+      );
+    }
+    return {
+      rows: stored.rows,
+      mode,
+      dataset: { id: stored.dataset.id, original_filename: stored.dataset.original_filename },
+    };
+  } catch (error) {
+    if (error instanceof DatasetSelectionError) throw error;
+    if (error instanceof DatasetStoreError) {
+      throw new DatasetSelectionError("DATASET_UNAVAILABLE", error.message, 503);
+    }
+    throw error;
+  }
 }

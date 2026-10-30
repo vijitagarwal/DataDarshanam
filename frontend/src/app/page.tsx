@@ -12,8 +12,19 @@ import { HeroState } from "@/components/HeroState";
 import { QueryResult } from "@/components/QueryResult";
 import { SavedChartsView } from "@/components/SavedChartsView";
 import { Sidebar, type WorkspacePanel } from "@/components/Sidebar";
-import { fetchSchema, postDashboardQuery, postQuery, selectDemoDataset, uploadCSVFile } from "@/lib/api";
-import type { ChatEntry, SavedChart, SchemaResponse } from "@/lib/types";
+import {
+  clearCustomDatasetSelection,
+  deleteUserDataset,
+  fetchSchema,
+  fetchUserDatasets,
+  getSelectedDatasetName,
+  postDashboardQuery,
+  postQuery,
+  selectCustomDataset,
+  selectDemoDataset,
+  uploadCSVFile,
+} from "@/lib/api";
+import type { ChatEntry, DatasetSummary, SavedChart, SchemaResponse } from "@/lib/types";
 import type { DocumentItem } from "@/lib/documentApi";
 
 type ViewName = "analyze" | "documents" | "charts";
@@ -42,6 +53,68 @@ export default function Home() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(null);
+  const [savedDatasets, setSavedDatasets] = useState<DatasetSummary[]>([]);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [datasetsLoading, setDatasetsLoading] = useState(false);
+  const [datasetsError, setDatasetsError] = useState<string | null>(null);
+
+  const refreshDatasets = useCallback(async () => {
+    setDatasetsLoading(true);
+    setDatasetsError(null);
+    try {
+      setSavedDatasets(await fetchUserDatasets());
+    } catch (reason: unknown) {
+      const message = reason instanceof Error ? reason.message : "Unable to load saved datasets.";
+      setDatasetsError(message);
+    } finally {
+      setDatasetsLoading(false);
+    }
+  }, []);
+
+  const handleAuthenticationChange = useCallback((signedIn: boolean) => {
+    setIsSignedIn(signedIn);
+    if (!signedIn) {
+      setSavedDatasets([]);
+      if (window.localStorage.getItem("datadarshan-dataset-mode") === "custom") {
+        setSchema(null);
+        setSchemaError("Sign in to access your private CSV dataset.");
+        clearCustomDatasetSelection();
+        selectDemoDataset();
+        setDatasetMode("demo");
+        setSelectedDatasetId(null);
+        setDatasetName("sales.csv");
+        setChatEntries([]);
+        setSavedCharts([]);
+        setStatusMessage("Authentication ended. Demo dataset restored.");
+      }
+      return;
+    }
+
+    void refreshDatasets();
+    if (window.localStorage.getItem("datadarshan-dataset-mode") === "custom") {
+      const storedDatasetId = window.localStorage.getItem("datadarshan-dataset-id");
+      setSelectedDatasetId(storedDatasetId);
+      setDatasetName(getSelectedDatasetName() ?? "Custom CSV");
+      void fetchSchema()
+        .then((data) => {
+          setSchema(data);
+          setSchemaError(null);
+          setDatasetName(data.filename ?? getSelectedDatasetName() ?? "Custom CSV");
+        })
+        .catch((reason: unknown) => {
+          const message = reason instanceof Error ? reason.message : "Unable to load the selected dataset.";
+          setSchema(null);
+          setSchemaError(message);
+          clearCustomDatasetSelection();
+          setSelectedDatasetId(null);
+          setDatasetName("");
+          selectDemoDataset();
+          setDatasetMode("demo");
+          setStatusMessage("The saved dataset is unavailable. Demo dataset restored.");
+        });
+    }
+  }, [refreshDatasets]);
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem("datadarshan-theme");
@@ -49,10 +122,12 @@ export default function Home() {
     setDarkTheme(storedTheme ? storedTheme === "dark" : prefersDark);
 
     const storedMode = window.localStorage.getItem("datadarshan-dataset-mode");
+    const storedDatasetId = window.localStorage.getItem("datadarshan-dataset-id");
     const legacyWorkspace = window.localStorage.getItem("datadarshan-workspace-id");
-    if (storedMode === "custom" || (!storedMode && legacyWorkspace)) {
+    if (storedMode === "custom" || (!storedMode && (legacyWorkspace || storedDatasetId))) {
       setDatasetMode("custom");
-      setDatasetName("Custom CSV");
+      setSelectedDatasetId(storedDatasetId);
+      setDatasetName(getSelectedDatasetName() ?? "Custom CSV");
     }
 
     let active = true;
@@ -186,9 +261,11 @@ export default function Home() {
       setSchema(newSchema);
       setDatasetName(newSchema.filename);
       setDatasetMode("custom");
+      setSelectedDatasetId(newSchema.dataset_id);
       setChatEntries([]);
       setSavedCharts([]);
       setOpenPanel(null);
+      await refreshDatasets();
       setStatusMessage(`${file.name} uploaded. Its schema is ready for questions.`);
     } catch (reason: unknown) {
       const message = reason instanceof Error ? reason.message : "Unable to upload this CSV.";
@@ -199,9 +276,62 @@ export default function Home() {
     }
   }
 
+  async function handleSelectDataset(dataset: DatasetSummary) {
+    setSchema(null);
+    setSchemaError(null);
+    setStatusMessage(`Loading ${dataset.original_filename}…`);
+    try {
+      const selectedSchema = await fetchSchema(dataset.id);
+      selectCustomDataset(dataset.id, dataset.original_filename);
+      setSelectedDatasetId(dataset.id);
+      setDatasetMode("custom");
+      setDatasetName(dataset.original_filename);
+      setSchema(selectedSchema);
+      setSchemaError(null);
+      setChatEntries([]);
+      setSavedCharts([]);
+      setStatusMessage(`${dataset.original_filename} selected.`);
+    } catch (reason: unknown) {
+      const message = reason instanceof Error ? reason.message : "Unable to load this saved dataset.";
+      setSchemaError(message);
+      clearCustomDatasetSelection();
+      selectDemoDataset();
+      setSelectedDatasetId(null);
+      setDatasetMode("demo");
+      setDatasetName("sales.csv");
+      setStatusMessage(`${message} Demo dataset restored.`);
+      void fetchSchema()
+        .then((demoSchema) => setSchema(demoSchema))
+        .catch(() => undefined);
+    }
+  }
+
+  async function handleDeleteDataset(dataset: DatasetSummary) {
+    if (!window.confirm(`Permanently delete ${dataset.original_filename} and its stored CSV?`)) return;
+    try {
+      await deleteUserDataset(dataset.id);
+      setSavedDatasets((items) => items.filter((item) => item.id !== dataset.id));
+      if (selectedDatasetId === dataset.id) {
+        clearCustomDatasetSelection();
+        setSelectedDatasetId(null);
+        setDatasetName("");
+        setSchema(null);
+        setSchemaError("The selected dataset was deleted. Choose another dataset or explicitly select the demo dataset.");
+        setChatEntries([]);
+        setSavedCharts([]);
+      }
+      setStatusMessage(`${dataset.original_filename} deleted.`);
+    } catch (reason: unknown) {
+      const message = reason instanceof Error ? reason.message : "Unable to delete this dataset.";
+      setDatasetsError(message);
+      setStatusMessage(message);
+    }
+  }
+
   async function handleSelectDemoDataset() {
     selectDemoDataset();
     setDatasetMode("demo");
+    setSelectedDatasetId(null);
     setDatasetName("sales.csv");
     setSchemaError(null);
     setStatusMessage("Loading the bundled demo dataset…");
@@ -269,13 +399,13 @@ export default function Home() {
             >
               {darkTheme ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
             </button>
-            <AuthControl isDark={darkTheme} />
+            <AuthControl isDark={darkTheme} onAuthenticationChange={handleAuthenticationChange} />
           </div>
         </div>
         <div className="ledger-header-meta">
-          <span className="ledger-dataset-chip" title={`${datasetName} · ${datasetMode === "demo" ? "Bundled demo dataset" : "Session-only custom data"}`}>
+          <span className="ledger-dataset-chip" title={`${datasetName} · ${datasetMode === "demo" ? "Bundled demo dataset" : "Private saved dataset"}`}>
             <span className="ledger-status-dot" aria-hidden="true" />
-            {datasetMode === "demo" ? "Demo" : "Custom"} · {datasetName} · {schema?.profile.rows.toLocaleString() ?? "—"} rows
+            {datasetMode === "demo" ? "Demo" : "Custom"} · {datasetName || "No dataset selected"} · {schema?.profile.rows.toLocaleString() ?? "—"} rows
           </span>
           {schemaError && <span className="ledger-inline-error" role="status">{schemaError}</span>}
         </div>
@@ -286,10 +416,17 @@ export default function Home() {
         profile={schema?.profile}
         datasetName={datasetName}
         datasetMode={datasetMode}
+        selectedDatasetId={selectedDatasetId}
+        datasets={savedDatasets}
+        isSignedIn={isSignedIn}
+        datasetsLoading={datasetsLoading}
+        datasetsError={datasetsError}
         schemaError={schemaError}
         chatEntries={chatEntries}
         onSelectEntry={focusHistoryEntry}
         onUploadCSV={handleUploadCSV}
+        onSelectDataset={handleSelectDataset}
+        onDeleteDataset={handleDeleteDataset}
         onSelectDemoDataset={handleSelectDemoDataset}
         isUploading={isUploading}
         onClose={() => setOpenPanel(null)}

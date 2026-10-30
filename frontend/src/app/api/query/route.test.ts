@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const mocks = vi.hoisted(() => ({
-  getDataset: vi.fn(),
-  loadDefaultData: vi.fn(),
+  resolveRequestDataset: vi.fn(),
   parseQuery: vi.fn(),
   runQuery: vi.fn(),
   buildChart: vi.fn(),
@@ -11,9 +10,17 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/engine/dataEngine", () => ({
-  getDataset: mocks.getDataset,
-  loadDefaultData: mocks.loadDefaultData,
   runQuery: mocks.runQuery,
+}));
+vi.mock("@/lib/engine/datasetSelection", () => ({
+  DatasetSelectionError: class DatasetSelectionError extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+      public readonly status: number,
+    ) { super(message); }
+  },
+  resolveRequestDataset: mocks.resolveRequestDataset,
 }));
 vi.mock("@/lib/engine/llmParser", () => ({ parseQuery: mocks.parseQuery }));
 vi.mock("@/lib/engine/chartBuilder", () => ({ buildChart: mocks.buildChart }));
@@ -60,8 +67,7 @@ function request(body: string, workspaceId?: string, datasetMode?: "demo" | "cus
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getDataset.mockReturnValue(rows);
-  mocks.loadDefaultData.mockResolvedValue(rows);
+  mocks.resolveRequestDataset.mockResolvedValue({ rows, mode: "demo" });
   mocks.parseQuery.mockResolvedValue(parsed);
   mocks.runQuery.mockReturnValue(result);
   mocks.buildChart.mockImplementation((_result, isDark) => ({ theme: isDark ? "dark" : "light" }));
@@ -89,75 +95,11 @@ describe("POST /api/query", () => {
       used_context: false,
       plotly_spec: { dark: { theme: "dark" }, light: { theme: "light" } },
     });
-    expect(mocks.getDataset).toHaveBeenCalledWith("workspace-123");
+    expect(mocks.resolveRequestDataset).toHaveBeenCalledOnce();
     expect(mocks.parseQuery).toHaveBeenCalledWith("show revenue by category", rows, null);
     expect(mocks.runQuery).toHaveBeenCalledWith(parsed, rows);
     expect(mocks.buildChart).toHaveBeenCalledTimes(2);
     expect(mocks.generateInsight).toHaveBeenCalledWith("show revenue by category", result);
-  });
-
-  it("preserves the legacy demo selection when no workspace is supplied", async () => {
-    mocks.getDataset.mockReturnValue(null);
-    const response = await POST(request(JSON.stringify({ query: "show revenue" })));
-
-    expect(response.status).toBe(200);
-    expect(mocks.getDataset).not.toHaveBeenCalled();
-    expect(mocks.loadDefaultData).toHaveBeenCalledOnce();
-    expect(mocks.parseQuery).toHaveBeenCalledWith("show revenue", rows, null);
-  });
-
-  it("uses the bundled dataset only when demo mode is explicit", async () => {
-    const response = await POST(request(JSON.stringify({ query: "show revenue" }), undefined, "demo"));
-
-    expect(response.status).toBe(200);
-    expect(mocks.loadDefaultData).toHaveBeenCalledOnce();
-    expect(mocks.getDataset).not.toHaveBeenCalled();
-    expect(mocks.parseQuery).toHaveBeenCalledWith("show revenue", rows, null);
-  });
-
-  it("rejects a custom selection when its workspace ID is absent", async () => {
-    const response = await POST(request(JSON.stringify({ query: "show revenue" }), undefined, "custom"));
-
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      code: "INVALID_DATASET_SELECTION",
-      error: "A valid workspace ID is required for a custom dataset.",
-    });
-    expect(mocks.loadDefaultData).not.toHaveBeenCalled();
-    expect(mocks.parseQuery).not.toHaveBeenCalled();
-  });
-
-  it.each(["stale-workspace-123", "unknown-workspace-123"])(
-    "does not substitute demo data for missing custom workspace %s",
-    async (workspaceId) => {
-      mocks.getDataset.mockReturnValue(null);
-      const response = await POST(request(
-        JSON.stringify({ query: "show revenue" }),
-        workspaceId,
-        "custom",
-      ));
-
-      expect(response.status).toBe(404);
-      expect(await response.json()).toMatchObject({
-        code: "DATASET_NOT_FOUND",
-        error: "The selected custom dataset is unavailable. Upload it again or explicitly select the demo dataset.",
-      });
-      expect(mocks.getDataset).toHaveBeenCalledWith(workspaceId);
-      expect(mocks.loadDefaultData).not.toHaveBeenCalled();
-      expect(mocks.parseQuery).not.toHaveBeenCalled();
-    },
-  );
-
-  it("treats a legacy unknown workspace as custom instead of falling back to demo", async () => {
-    mocks.getDataset.mockReturnValue(null);
-    const response = await POST(request(
-      JSON.stringify({ query: "show revenue" }),
-      "legacy-workspace-123",
-    ));
-
-    expect(response.status).toBe(404);
-    expect(mocks.loadDefaultData).not.toHaveBeenCalled();
-    expect(mocks.parseQuery).not.toHaveBeenCalled();
   });
 
   it("returns 400 for malformed JSON and invalid request bodies", async () => {
@@ -179,7 +121,7 @@ describe("POST /api/query", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: true, message: "Query string cannot be empty" });
-    expect(mocks.getDataset).not.toHaveBeenCalled();
+    expect(mocks.resolveRequestDataset).not.toHaveBeenCalled();
   });
 
   it("returns parser validation failures without invoking downstream stages", async () => {

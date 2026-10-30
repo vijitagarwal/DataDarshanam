@@ -8,6 +8,7 @@ import { InsightCard } from "./InsightCard";
 import { FilterPills } from "./FilterPills";
 import { ResultTable } from "./ResultTable";
 import { Download, BookmarkCheck, Bookmark, Link2, RotateCw, PencilLine } from "lucide-react";
+import { serializeCsvRows } from "@/lib/csvExport";
 
 interface QueryResultProps {
   entryIndex: number;
@@ -67,11 +68,7 @@ export const QueryResult: React.FC<QueryResultProps> = ({
   const handleDownloadCSV = () => {
     if (!dataRows || dataRows.length === 0) return;
     const keys = Object.keys(dataRows[0]);
-    const escapeCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
-    const csvContent = [
-      keys.map(escapeCell).join(","),
-      ...dataRows.map((row) => keys.map((key) => escapeCell(row[key])).join(",")),
-    ].join("\n");
+    const csvContent = serializeCsvRows(keys, dataRows);
     const encodedUri = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);

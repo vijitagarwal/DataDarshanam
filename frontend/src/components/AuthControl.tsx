@@ -8,9 +8,10 @@ import { X } from "lucide-react";
 
 interface AuthControlProps {
   isDark: boolean;
+  onAuthenticationChange?: (signedIn: boolean) => void;
 }
 
-export function AuthControl({ isDark }: AuthControlProps) {
+export function AuthControl({ isDark, onAuthenticationChange }: AuthControlProps) {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,12 +26,22 @@ export function AuthControl({ isDark }: AuthControlProps) {
     try {
       const supabase = getBrowserSupabaseClient();
       void supabase.auth.getSession().then(({ data }) => {
-        if (active) setUser(data.session?.user ?? null);
+        if (active) {
+          const currentUser = data.session?.user ?? null;
+          setUser(currentUser);
+          onAuthenticationChange?.(Boolean(currentUser));
+        }
       }).catch(() => {
-        if (active) setConfigured(false);
+        if (active) {
+          setConfigured(false);
+          onAuthenticationChange?.(false);
+        }
       });
       const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (active) setUser(session?.user ?? null);
+        if (active) {
+          setUser(session?.user ?? null);
+          onAuthenticationChange?.(Boolean(session?.user));
+        }
       });
       return () => {
         active = false;
@@ -38,9 +49,10 @@ export function AuthControl({ isDark }: AuthControlProps) {
       };
     } catch {
       setConfigured(false);
+      onAuthenticationChange?.(false);
       return () => { active = false; };
     }
-  }, []);
+  }, [onAuthenticationChange]);
 
   useEffect(() => {
     const dialog = dialogRef.current;

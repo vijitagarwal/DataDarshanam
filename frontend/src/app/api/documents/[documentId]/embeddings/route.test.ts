@@ -21,7 +21,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.authenticateRequest.mockResolvedValue({ user: { id: "22222222-2222-4222-8222-222222222222" } });
   mocks.createServiceRoleSupabaseClient.mockReturnValue({});
-  mocks.GeminiEmbeddingProvider.mockReturnValue({});
+  mocks.GeminiEmbeddingProvider.mockImplementation(function () {
+    return {};
+  });
 });
 
 describe("document embeddings route", () => {
@@ -63,7 +65,7 @@ describe("document embeddings route", () => {
     expect(response.status).toBe(503);
     expect((await response.json()).error.message).not.toContain("provider");
 
-    mocks.GeminiEmbeddingProvider.mockImplementation(() => {
+    mocks.GeminiEmbeddingProvider.mockImplementation(function () {
       throw Object.assign(new Error("sensitive detail"), { code: "UNSAFE" });
     });
     const thrown = await POST(new Request("http://localhost"), context);

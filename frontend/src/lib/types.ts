@@ -92,11 +92,24 @@ export interface DatasetProfile {
 export interface SchemaResponse {
   profile: DatasetProfile;
   suggested_questions: string[];
+  dataset_id?: string;
+  filename?: string;
 }
 
 export interface UploadResponse extends SchemaResponse {
+  dataset_id: string;
   filename: string;
   rows: number;
+}
+
+export interface DatasetSummary {
+  id: string;
+  original_filename: string;
+  file_size: number;
+  row_count: number;
+  column_count: number;
+  created_at: string;
+  status: "uploading" | "ready" | "failed" | "deleting";
 }
 
 export interface SavedChart {

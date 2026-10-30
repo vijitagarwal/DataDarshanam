@@ -7,11 +7,15 @@ export const maxDuration = 30;
 
 export async function GET(req: NextRequest) {
   try {
-    const { rows } = await resolveRequestDataset(req);
+    const { rows, dataset } = await resolveRequestDataset(req);
 
     const profile = getDatasetProfile(rows);
     const suggested = suggestQuestions(rows, 5);
-    return NextResponse.json({ profile, suggested_questions: suggested });
+    return NextResponse.json({
+      profile,
+      suggested_questions: suggested,
+      ...(dataset ? { dataset_id: dataset.id, filename: dataset.original_filename } : {}),
+    });
   } catch (e) {
     if (e instanceof DatasetSelectionError) {
       return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });

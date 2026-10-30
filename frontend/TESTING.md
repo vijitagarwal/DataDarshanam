@@ -12,6 +12,16 @@ The tests do not invoke the live LLM provider. Parser output is validated determ
 
 Supabase authentication and document ownership tests use mocked clients. They do not require a Supabase project or credentials.
 
+The CSV upload route reads the request stream into a bounded buffer before multipart parsing, including requests without `Content-Length`. The application accepts CSV files up to 25 MiB, but Vercel Functions currently limit request bodies to 4.5 MB; uploads above that platform limit require a future authenticated signed direct-to-Storage flow or a hosting path with a larger ingress limit.
+
+Mission 10 adds deterministic tests for:
+
+- RFC-compliant quoted fields and embedded newlines, currency coercion, strict UTF-8, malformed rows, duplicate headers, and parser row/column limits.
+- Verified-user dataset selection, fail-closed missing/custom IDs, owner-filtered dataset listing and lookup, the existing five-row Laptop/Phone/Tablet regression, and upload quota handling.
+- Authenticated upload, listing, and deletion route behavior using mocked Supabase and Storage boundaries.
+
+These tests do not execute the SQL migration or prove live Supabase RLS, Storage policy behavior, `SECURITY DEFINER` reservation locking, object cleanup after process interruption, account quotas under concurrent transactions, or two-user isolation. Those checks must be run against the verified non-production staging project before Preview readiness is claimed.
+
 Document upload, listing, completion, and deletion route tests use mocked authentication, database, and Storage boundaries. Live Supabase RLS, Storage policies, signed-upload enforcement, and cleanup behavior still require integration tests against a non-production Supabase project.
 
 Mission 6 adds deterministic tests for:

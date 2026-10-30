@@ -4,6 +4,7 @@
  */
 
 import { DatasetProfile, QueryResult, ParsedQuery, ColumnProfile, DataRow } from "./types";
+import { parseCSV } from "./csv";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -15,70 +16,7 @@ const MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 const TIME_COLUMNS = new Set(["year", "month", "month_name", "quarter"]);
 const TIME_DIMS = new Set(["year", "month", "quarter"]);
 
-// ---------------------------------------------------------------------------
-// Process-local storage lets isolated Next.js route bundles share uploaded
-// datasets during a running instance. It is intentionally not durable.
-// ---------------------------------------------------------------------------
-
-const processGlobal = globalThis as typeof globalThis & {
-  __datadarshanamDatasets?: Map<string, DataRow[]>;
-};
-const _datasets = processGlobal.__datadarshanamDatasets ?? new Map<string, DataRow[]>();
-processGlobal.__datadarshanamDatasets = _datasets;
 let _defaultData: DataRow[] | null = null;
-
-// ---------------------------------------------------------------------------
-// CSV Parser (no external dependency — handles quoted fields)
-// ---------------------------------------------------------------------------
-
-function parseCSV(text: string): DataRow[] {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  if (lines.length < 2) return [];
-
-  const headers = splitCSVLine(lines[0]);
-  const rows: DataRow[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const values = splitCSVLine(line);
-    const row: DataRow = {};
-    headers.forEach((h, idx) => {
-      const raw = values[idx] ?? "";
-      row[h.trim()] = coerce(raw);
-    });
-    rows.push(row);
-  }
-  return rows;
-}
-
-function splitCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else { inQuotes = !inQuotes; }
-    } else if (ch === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
-}
-
-function coerce(raw: string): string | number | null {
-  if (raw === "" || raw === "null" || raw === "NULL" || raw === "NA" || raw === "N/A") return null;
-  const n = Number(raw);
-  if (!isNaN(n) && raw.trim() !== "") return n;
-  return raw;
-}
 
 // ---------------------------------------------------------------------------
 // Date enrichment (adds year, month, month_name, quarter columns)
@@ -145,14 +83,6 @@ export async function loadDefaultData(): Promise<DataRow[]> {
 
   _defaultData = enrichWithDates(parseCSV(text));
   return _defaultData;
-}
-
-export function getDataset(workspaceId: string): DataRow[] | null {
-  return _datasets.get(workspaceId) ?? null;
-}
-
-export function setDataset(workspaceId: string, rows: DataRow[]): void {
-  _datasets.set(workspaceId, enrichWithDates(rows));
 }
 
 export function loadFromCSVText(text: string): DataRow[] {

@@ -1,5 +1,5 @@
 export const DATASET_MODE_HEADER = "X-Dataset-Mode";
-export const WORKSPACE_ID_HEADER = "X-Workspace-ID";
+export const DATASET_ID_HEADER = "X-Dataset-ID";
 
 export const CHART_COLORS = [
   "#4F46E5", // indigo

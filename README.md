@@ -25,16 +25,16 @@ Designed with a premium dark mode UI inspired by **Linear**, **Vercel**, and **P
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Next.js 16 App Router (React 19 + Tailwind CSS v4)          │
-│  ├── Sidebar: Brand, History, Schema Profile, Saved, How-It-Works│
-│  ├── Workspace: Hero Welcome / Query Cards / 3-Chart Dashboard │
-│  └── Floating Chat Input: Animated cycling query placeholders │
+│  ├── Ledger workspace: Analyze, Documents, Charts, query history│
+│  ├── Same-origin API routes: CSV upload, schema, query, dashboard│
+│  └── Existing TypeScript analytics engine and Plotly rendering │
 └─────────────────────────────────────────────────────────────┘
-                              │ REST API
+                              │ verified Supabase session
 ┌─────────────────────────────────────────────────────────────┐
-│  FastAPI (Python 3.14) Backend                              │
-│  ├── Groq production model: Intent parsing & AI Insights      │
-│  ├── Pandas Data Engine: In-memory aggregation & filters    │
-│  └── Plotly Engine: Dynamic figure spec generation          │
+│  Supabase Auth + private Storage + PostgreSQL RLS            │
+│  ├── Private CSV objects under owner-scoped UUID paths       │
+│  ├── Dataset metadata protected by user_id policies          │
+│  └── Server-only operations use verified identity and filters│
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,19 +73,16 @@ The deployed Vercel application runs the same-origin Next.js routes in `frontend
 
 ### Environment configuration
 
-Create `backend/.env` for local development. Keep secrets out of source control.
+For the optional legacy FastAPI service, configure `backend/.env` from `backend/.env.example`. The Next.js frontend has a separate environment file described below.
 
 ```env
-GROQ_API_KEY=your-groq-api-key
+GROQ_API_KEY=
 GROQ_MODEL=openai/gpt-oss-120b
 ALLOWED_ORIGINS=http://localhost:3000
 MAX_UPLOAD_BYTES=26214400
 MAX_UPLOAD_ROWS=250000
 MAX_UPLOAD_COLUMNS=100
 ```
-
-For the optional legacy frontend-to-backend setup only, set `NEXT_PUBLIC_API_URL` to the backend URL before building. The deployed Next.js application uses same-origin routes.
-The browser stores a workspace identifier and an explicit demo/custom dataset selection. If a selected custom dataset is unavailable, the API returns an error instead of substituting the bundled demo CSV. Custom uploads are still held only in server-process memory and may not be available across serverless instances or restarts; workspace IDs are not authentication or a multi-tenant security boundary.
 
 ### Optional: Start the legacy FastAPI backend
 ```bash
@@ -104,5 +101,37 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+The deployed application uses same-origin Next.js routes; the FastAPI service is a separate legacy path and is not required by the frontend.
+
+### Authenticated CSV datasets
+
+Custom CSV uploads require an existing Supabase account. The application stores each CSV in the private `datasets` Storage bucket and keeps owner-scoped metadata in `public.datasets`. The browser retains only the selected dataset ID; it does not persist CSV contents. Every custom upload, list, query, and delete request requires a verified Supabase session. Missing or unowned custom data returns an error and never falls back to the demo CSV.
+
+CSV uploads are limited to 25 MiB, 250,000 data rows, 100 columns, and 1,000,000 cells. An account may keep up to 10 datasets and 200 MiB in total. The SQL reservation function serializes concurrent uploads before applying those per-account limits.
+
+To configure a local frontend, create `frontend/.env.local` if it does not already exist, or merge the variable names from [`frontend/.env.example`](./frontend/.env.example) into the existing file without overwriting its values. Required for authenticated datasets:
+
+- `NEXT_PUBLIC_SUPABASE_URL` — public project URL.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — browser-safe anon/publishable key; RLS must remain enabled.
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only key used by the controlled API routes. Never expose it to browser code.
+
+`GROQ_API_KEY` and `GEMINI_API_KEY` are optional server-side provider keys for AI insights and document features. Keep `DOCUMENT_RAG_ANSWERS_ENABLED=false` until the non-production RAG integration is separately verified.
+
+### Staging migration and Preview setup
+
+The additive dataset migration is [`supabase/migrations/20261027120000_mission10_owned_datasets.sql`](./supabase/migrations/20261027120000_mission10_owned_datasets.sql). It has **not** been applied to any Supabase project. Before applying it, verify the project reference and dashboard identity are for the intended non-production staging project. Then, from the repository root, link the Supabase CLI to that verified project and review the pending migration list before applying:
+
+```powershell
+npx supabase link --project-ref <verified-staging-project-ref>
+npx supabase migration list
+npx supabase db push
+```
+
+Configure the required Supabase variables in local `frontend/.env.local` and Vercel **Preview** settings only after staging is confirmed. Provision an existing test user in the staging Auth dashboard and allow the localhost and Preview callback URLs in staging Auth settings. Do not copy staging keys to Production or enable the document-answer feature flag as part of this dataset setup.
+
+The migration grants authenticated users read access only to their own dataset metadata and Storage objects. Writes are performed by the server API after token verification; service-role database operations include an explicit `user_id` filter. The service-role key remains server-only. Removing a dataset through the app removes its private object and metadata. Before deleting an Auth account administratively, first remove that account's dataset objects through the application or a verified operator cleanup procedure; the `auth.users` foreign-key cascade removes metadata but cannot delete Storage objects.
+
+Local unit tests mock Supabase and do not require credentials. They do not prove live RLS, Storage policies, SQL quota locking, Auth redirects, Vercel Preview configuration, or multi-user isolation; those remain staging verification steps.
 
 The authenticated document workspace and Q&A flow are documented in [AI_REFERENCE.md](./AI_REFERENCE.md). The Q&A endpoint remains disabled by default until live Supabase and provider verification is complete. See the [mission history index](./docs/mission-history/README.md) and [frontend testing guide](./frontend/TESTING.md) for implementation and verification details.

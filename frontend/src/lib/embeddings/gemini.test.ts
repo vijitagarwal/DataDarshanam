@@ -23,12 +23,14 @@ beforeEach(() => {
   mocks.countTokens.mockImplementation(async ({ contents }: { contents: string }) => ({
     totalTokens: Array.from(contents).length,
   }));
-  mocks.GoogleGenAI.mockImplementation(() => ({
-    models: {
-      embedContent: mocks.embedContent,
-      countTokens: mocks.countTokens,
-    },
-  }));
+  mocks.GoogleGenAI.mockImplementation(function () {
+    return {
+      models: {
+        embedContent: mocks.embedContent,
+        countTokens: mocks.countTokens,
+      },
+    };
+  });
 });
 
 describe("GeminiEmbeddingProvider", () => {

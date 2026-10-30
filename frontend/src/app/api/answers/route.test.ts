@@ -58,7 +58,9 @@ beforeEach(() => {
   mocks.authenticateRequest.mockResolvedValue({ user: { id: "22222222-2222-4222-8222-222222222222" } });
   mocks.getBearerToken.mockReturnValue("verified-user-token");
   mocks.createUserSupabaseClient.mockReturnValue({ rpc: vi.fn() });
-  mocks.GeminiEmbeddingProvider.mockReturnValue({});
+  mocks.GeminiEmbeddingProvider.mockImplementation(function () {
+    return {};
+  });
   mocks.retrieveDocumentChunks.mockResolvedValue(evidence);
   mocks.generateGroundedAnswer.mockResolvedValue({
     status: "answered",
