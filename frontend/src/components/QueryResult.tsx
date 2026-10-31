@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { QueryResponse, SavedChart } from "@/lib/types";
 import { KpiTiles } from "./KpiTiles";
 import { ChartView } from "./ChartView";
-import { InsightCard } from "./InsightCard";
 import { FilterPills } from "./FilterPills";
 import { ResultTable } from "./ResultTable";
 import { Download, BookmarkCheck, Bookmark, Link2, RotateCw, PencilLine } from "lucide-react";
@@ -19,6 +18,7 @@ interface QueryResultProps {
   onRetry?: (query: string) => void;
   onEdit?: (query: string) => void;
   isDark?: boolean;
+  onSuggestion?: (query: string) => void;
 }
 
 export const QueryResult: React.FC<QueryResultProps> = ({
@@ -30,6 +30,7 @@ export const QueryResult: React.FC<QueryResultProps> = ({
   onRetry,
   onEdit,
   isDark = true,
+  onSuggestion,
 }) => {
   const [chartOverride, setChartOverride] = useState<string>("auto");
 
@@ -37,7 +38,6 @@ export const QueryResult: React.FC<QueryResultProps> = ({
   const result = response.result;
   const parsed = response.parsed;
   const insight = response.insight;
-  const fallback = response.fallback;
   const usedContext = response.used_context;
 
   if (response.error || result?.error) {
@@ -100,7 +100,20 @@ export const QueryResult: React.FC<QueryResultProps> = ({
       </p>
       {parsed?.filters && <FilterPills filters={parsed.filters} />}
 
-      <InsightCard insight={insight} fallback={fallback} modelGenerated={dataRows.length > 0 && !fallback} />
+      {response.answer && (
+        <section className="ledger-answer-summary" aria-label="Conversational answer">
+          <p className="ledger-kicker">{response.answer.model_generated ? "AI-grounded answer" : "Computed answer"}</p>
+          <h3>{response.answer.headline}</h3>
+          {response.answer.explanation.filter(Boolean).map((line, index) => <p key={index}>{line}</p>)}
+          {response.answer.evidence.length > 0 && (
+            <ul>
+              {response.answer.evidence.slice(0, 5).map((item) => (
+                <li key={item.id}><strong>{item.id}</strong> {item.label}: {typeof item.value === "number" ? item.value.toLocaleString() : item.value}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       {dataRows.length > 0 && (
         <p className="ledger-computed-label"><span aria-hidden="true">●</span> Figures computed from rows</p>
       )}
@@ -132,6 +145,19 @@ export const QueryResult: React.FC<QueryResultProps> = ({
             </button>
           </div>
         </section>
+      )}
+      {response.answer && onSuggestion && (
+        <div className="ledger-actions" aria-label="Suggested follow-up questions">
+          {[
+            "Compare the top two categories",
+            `Show ${metric.replace(/_/g, " ")} over time`,
+            "Show the lowest-performing category",
+          ].map((suggestion) => (
+            <button key={suggestion} type="button" className="ledger-button" onClick={() => onSuggestion(suggestion)}>
+              {suggestion}
+            </button>
+          ))}
+        </div>
       )}
     </article>
   );

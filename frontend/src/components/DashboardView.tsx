@@ -31,6 +31,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ response, entryId,
         <span className="ledger-tag">{charts.length} charts returned</span>
       </div>
 
+      {response.summary && (
+        <section className="ledger-answer-summary" aria-label="Dashboard summary">
+          <p className="ledger-kicker">{response.summary_fallback ? "Computed dashboard summary" : "AI dashboard summary"}</p>
+          <p>{response.summary}</p>
+        </section>
+      )}
+
       <div className="ledger-dashboard-results">
         {charts.map((item, index) => (
           <section className="ledger-dashboard-chart" key={`${item.parsed.title}-${index}`}>

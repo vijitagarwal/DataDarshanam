@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Database, History, Moon, Sun } from "lucide-react";
 import { AuthControl } from "@/components/AuthControl";
 import { BrandLockup } from "@/components/BrandLockup";
@@ -58,6 +58,19 @@ export default function Home() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [datasetsLoading, setDatasetsLoading] = useState(false);
   const [datasetsError, setDatasetsError] = useState<string | null>(null);
+  const activeDatasetKeyRef = useRef<string | null>(null);
+
+  const activeDatasetKey = datasetMode === "custom" ? `custom:${selectedDatasetId ?? ""}` : "demo";
+  useEffect(() => {
+    if (activeDatasetKeyRef.current !== null && activeDatasetKeyRef.current !== activeDatasetKey) {
+      setChatEntries([]);
+      setSavedCharts([]);
+      setOpenPanel(null);
+      setQuestionDraft("");
+      setStatusMessage("Dataset changed. Previous conversation context was cleared.");
+    }
+    activeDatasetKeyRef.current = activeDatasetKey;
+  }, [activeDatasetKey]);
 
   const refreshDatasets = useCallback(async () => {
     setDatasetsLoading(true);
@@ -169,10 +182,24 @@ export default function Home() {
     setStatusMessage(`Working on: ${normalizedQuery}`);
     setIsLoading(true);
 
-    const lastEntry = chatEntries[chatEntries.length - 1];
-    const previousContext = lastEntry?.response?.result && !lastEntry.response.error
-      ? lastEntry.response.result
-      : undefined;
+    const recentTurns = chatEntries
+      .slice(-3)
+      .map((entry) => entry.response)
+      .filter((response): response is NonNullable<typeof response> =>
+        Boolean(response?.result && response.evidence && !response.error))
+      .map((response) => ({
+        question: response.query,
+        result: {
+          title: response.query,
+          metric: response.result!.metric,
+          dimensions: response.result!.dimensions ?? [],
+          evidence: response.evidence!.facts ?? [],
+        },
+      }));
+    const previousContext = recentTurns.length > 0 ? {
+      dataset_id: datasetMode === "custom" ? selectedDatasetId ?? "" : "demo",
+      turns: recentTurns,
+    } : undefined;
 
     try {
       const isDashboard = /dashboard|overview/i.test(normalizedQuery);
@@ -213,7 +240,7 @@ export default function Home() {
         });
       }, 0);
     }
-  }, [chatEntries, isLoading, schema, schemaError]);
+  }, [chatEntries, datasetMode, isLoading, schema, schemaError, selectedDatasetId]);
 
   const handleGenerateDashboard = () => handleSendQuery("generate full dashboard overview");
 
@@ -493,6 +520,7 @@ export default function Home() {
                             setFocusRequest((request) => request + 1);
                           }}
                           isDark={darkTheme}
+                          onSuggestion={handleSendQuery}
                         />
                       );
                     }

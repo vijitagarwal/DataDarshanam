@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseModelOutput, validateParsedQuery } from "./llmParser";
+import { parseDeterministicQuery, parseModelOutput, validateParsedQuery } from "./llmParser";
 import type { DataRow } from "./types";
 
 const rows: DataRow[] = [
@@ -58,6 +58,10 @@ describe("LLM query validation", () => {
     expectInvalid({ ...validQuery, dimensions: ["unknown"] }, 'Dimension "unknown" is not a column in this dataset.');
   });
 
+  it("rejects count aggregation on a numeric metric", () => {
+    expectInvalid({ ...validQuery, aggregation: "count" }, "Count requires the record-count metric.");
+  });
+
   it("rejects invalid filter operators and fields", () => {
     expectInvalid({
       ...validQuery,
@@ -78,5 +82,25 @@ describe("LLM query validation", () => {
   it("rejects unsupported chart types and unexpected fields", () => {
     expectInvalid({ ...validQuery, chart_type: "area" }, 'Unsupported chart type "area".');
     expectInvalid({ ...validQuery, extra: true }, 'Unexpected field "extra" in AI query output.');
+  });
+
+  it("classifies model error objects separately from query plans", () => {
+    expect(parseModelOutput(JSON.stringify({ error: true, message: "Field unavailable" }), rows)).toMatchObject({
+      error: true,
+      code: "INVALID_MODEL_RESPONSE",
+    });
+  });
+
+  it("supports deterministic totals and record counts", () => {
+    expect(parseDeterministicQuery("Show total revenue by category", rows)).toMatchObject({
+      metric: "revenue",
+      aggregation: "sum",
+      dimensions: ["category"],
+    });
+    expect(parseDeterministicQuery("Count records by category", rows)).toMatchObject({
+      metric: "__row_count",
+      aggregation: "count",
+      dimensions: ["category"],
+    });
   });
 });

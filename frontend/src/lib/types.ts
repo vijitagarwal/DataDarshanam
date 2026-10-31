@@ -41,6 +41,25 @@ export interface PlotlyThemeSpec {
   layout: Record<string, PlotlyValue>;
 }
 
+export interface EvidenceItem {
+  id: string;
+  metric: string;
+  label: string;
+  value: number | string | null;
+  category?: string;
+  calculationType: string;
+  context: string;
+}
+
+export interface EvidencePacket {
+  generatedFrom: "deterministic_query_result";
+  metric: string;
+  dimensions: string[];
+  facts: EvidenceItem[];
+  supportedInterpretations: string[];
+  unavailableInterpretations: string[];
+}
+
 export interface QueryResponse {
   success: boolean;
   error?: boolean;
@@ -55,6 +74,19 @@ export interface QueryResponse {
     light: PlotlyThemeSpec;
   };
   message?: string;
+  evidence?: EvidencePacket;
+  answer?: ConversationalAnswer;
+  answer_status?: ConversationalAnswer["status"];
+  model_generated?: boolean;
+}
+
+export interface ConversationalAnswer {
+  status: "answered" | "insufficient_data" | "unsupported" | "ambiguous";
+  headline: string;
+  explanation: string[];
+  limitations: string[];
+  model_generated: boolean;
+  evidence: EvidenceItem[];
 }
 
 export interface DashboardChartItem {
@@ -70,6 +102,9 @@ export interface DashboardResponse {
   success: boolean;
   query: string;
   charts: DashboardChartItem[];
+  summary?: string;
+  summary_fallback?: boolean;
+  model_generated?: boolean;
 }
 
 export interface DatasetColumnInfo {

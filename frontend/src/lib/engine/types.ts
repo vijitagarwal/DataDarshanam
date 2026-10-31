@@ -75,3 +75,22 @@ export interface DatasetProfile {
 export interface DataRow {
   [key: string]: string | number | boolean | null | undefined;
 }
+
+export interface EvidenceItem {
+  id: string;
+  metric: string;
+  label: string;
+  value: number | string | null;
+  category?: string;
+  calculationType: "total" | "average" | "highest" | "lowest" | "rank" | "share" | "difference" | "change" | "trend" | "missing_period" | "outlier";
+  context: string;
+}
+
+export interface EvidencePacket {
+  generatedFrom: "deterministic_query_result";
+  metric: string;
+  dimensions: string[];
+  facts: EvidenceItem[];
+  supportedInterpretations: EvidenceItem["calculationType"][];
+  unavailableInterpretations: string[];
+}

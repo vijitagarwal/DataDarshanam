@@ -936,6 +936,47 @@ button:disabled {
   margin: 12px 0 0;
 }
 
+.ledger-password-field {
+  position: relative;
+}
+
+.ledger-password-field .ledger-auth-input {
+  padding-right: 38px;
+}
+
+.ledger-password-toggle {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ledger-muted);
+}
+
+.ledger-password-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  margin: -5px 0 12px;
+  padding: 0;
+  color: var(--ledger-muted);
+  font-size: 11px;
+  list-style: none;
+}
+
+.ledger-password-checks .valid {
+  color: var(--ledger-teal);
+}
+
+.ledger-auth-switch {
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ledger-teal);
+  font-size: 12px;
+}
+
 .ledger-private-note {
   margin: 0 0 18px;
   border-left: 3px solid var(--ledger-warning);

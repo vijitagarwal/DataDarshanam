@@ -5,6 +5,7 @@ import { parseDashboardQuery } from "@/lib/engine/llmParser";
 import { runQuery } from "@/lib/engine/dataEngine";
 import { buildChart } from "@/lib/engine/chartBuilder";
 import { ParsedQuery } from "@/lib/engine/types";
+import { generateInsight } from "@/lib/engine/insightGen";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,7 +41,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, query, charts });
+    const summarySources = charts.filter((chart) => chart.result.data.length > 0).slice(0, 3).map((chart) => chart.result);
+    const summaries = await Promise.all(summarySources.map((result, index) =>
+      generateInsight(`Summarize dashboard view ${index + 1}: strongest and weakest performance.`, result)));
+    const summary = summaries.length
+      ? {
+          insight: summaries.map((item) => item.insight).join(" "),
+          fallback: summaries.every((item) => item.fallback),
+        }
+      : { insight: "No dashboard chart data was available for a summary.", fallback: true };
+    return NextResponse.json({
+      success: true,
+      query,
+      charts,
+      summary: summary.insight,
+      summary_fallback: summary.fallback,
+      model_generated: !summary.fallback,
+    });
   } catch (e) {
     if (e instanceof DatasetSelectionError) {
       return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });

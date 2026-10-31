@@ -1,5 +1,30 @@
 # DataDarshanam
 
+## Supabase email registration
+
+Public account registration uses the existing Supabase Auth client. Configure the authentication
+redirect URL in **Supabase Dashboard > Authentication > URL Configuration**:
+
+- Add the deployed site URL plus `/auth/callback` to **Redirect URLs**.
+- For local development, add `http://localhost:3000/auth/callback`.
+- Production callback redirects must include the exact deployed HTTPS origin plus
+  `/auth/callback`; for example, `https://<deployment-domain>/auth/callback`.
+- Enable **Confirm email** when verification should be required; the app supports both verified
+  and non-verifying registration flows.
+- Supabase email templates must link back to the configured callback URL.
+
+### Exact redirect configuration
+
+| Environment | Application origin | `emailRedirectTo` / site callback |
+| --- | --- | --- |
+| Local Next.js | `http://localhost:3000` | `http://localhost:3000/auth/callback` |
+| Production | Exact HTTPS deployment origin, with no trailing path | `<production-origin>/auth/callback` |
+
+Add each callback above to Supabase **Authentication > URL Configuration > Redirect URLs**.
+Set the production Site URL to the exact production origin. Do not commit environment-specific
+Supabase redirect settings; the app derives its callback from the browser origin and Supabase
+must allow that exact origin.
+
 **Turn business questions into clear, evidence-backed answers and visualizations.**
 
 DataDarshanam is a conversational analytics workspace for exploring demo data, uploading CSV datasets, and asking questions in natural language. It combines deterministic analytics, interactive charts, document workflows, and AI-assisted explanations in one Ledger-style interface.

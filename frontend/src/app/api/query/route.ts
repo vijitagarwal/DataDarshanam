@@ -4,6 +4,9 @@ import { parseQuery } from "@/lib/engine/llmParser";
 import { runQuery } from "@/lib/engine/dataEngine";
 import { buildChart } from "@/lib/engine/chartBuilder";
 import { generateInsight } from "@/lib/engine/insightGen";
+import { generateAnalyticalEvidence } from "@/lib/engine/analyticalEvidence";
+import { validateConversationContext, resolveConversationReference } from "@/lib/conversationContext";
+import { DATASET_ID_HEADER, DATASET_MODE_HEADER } from "@/lib/constants";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,7 +35,14 @@ export async function POST(req: NextRequest) {
       !Array.isArray(previousContextValue)
       ? previousContextValue as Record<string, unknown>
       : null;
-
+    const datasetMode = req.headers.get(DATASET_MODE_HEADER) ?? "demo";
+    const datasetId = datasetMode === "custom" ? req.headers.get(DATASET_ID_HEADER) : "demo";
+    const conversationContext = previousContext
+      ? validateConversationContext(previousContext, datasetId ?? "")
+      : null;
+    if (previousContext && !conversationContext) {
+      return NextResponse.json({ error: true, message: "Conversation context is invalid for the selected dataset." }, { status: 400 });
+    }
     if (!query) {
       return NextResponse.json({ error: true, message: "Query string cannot be empty" }, { status: 400 });
     }
@@ -46,17 +56,37 @@ export async function POST(req: NextRequest) {
       }
       throw e;
     }
+    const supportedColumns = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+    const reference = conversationContext ? resolveConversationReference(query, conversationContext, supportedColumns) : {};
+    if (reference.clarification) {
+      return NextResponse.json({
+        success: false, error: true, query, answer_status: "ambiguous",
+        message: reference.clarification, insight: reference.clarification,
+      });
+    }
 
     // Parse query via LLM
-    const parsed = await parseQuery(query, rows, previousContext);
+    const parserContext = conversationContext?.turns.at(-1)?.result as unknown as Record<string, unknown> | null ?? null;
+    let parsed = await parseQuery(reference.resolvedQuery ?? query, rows, parserContext);
 
     if (parsed.error) {
+      const status = parsed.code === "AI_SERVICE_ERROR" ? 503 : 200;
       return NextResponse.json({
         success: false, error: true,
         query, parsed,
         message: parsed.message ?? "Unable to parse query",
         insight: parsed.message ?? "Unable to parse query",
-      });
+        code: parsed.code,
+      }, { status });
+    }
+    if (reference.temporalFilter && !parsed.error) {
+      parsed = {
+        ...parsed,
+        filters: [
+          ...parsed.filters.filter((filter) => filter.field !== reference.temporalFilter?.field),
+          { field: reference.temporalFilter.field, op: "eq", value: reference.temporalFilter.year },
+        ],
+      };
     }
 
     // Run data query
@@ -77,10 +107,23 @@ export async function POST(req: NextRequest) {
       Promise.resolve(buildChart(result, false)),
       generateInsight(query, result),
     ]);
+    const evidence = generateAnalyticalEvidence(result);
+    const answer = {
+      status: evidence.facts.length ? "answered" as const : "insufficient_data" as const,
+      headline: fallback ? "Computed result available" : insight.split("\n")[0],
+      explanation: fallback ? [insight] : insight.split("\n").slice(1),
+      limitations: evidence.unavailableInterpretations,
+      model_generated: !fallback,
+      evidence: evidence.facts,
+    };
 
     return NextResponse.json({
       success: true, error: false,
       query, parsed, result, insight,
+      answer,
+      evidence,
+      answer_status: answer.status,
+      model_generated: answer.model_generated,
       fallback,
       used_context: previousContext !== null,
       plotly_spec: { dark: darkSpec, light: lightSpec },

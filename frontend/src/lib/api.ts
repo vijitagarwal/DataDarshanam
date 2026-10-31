@@ -3,7 +3,6 @@ import {
   DashboardResponse,
   SchemaResponse,
   UploadResponse,
-  QueryResultData,
   DatasetSummary,
 } from "./types";
 import { DATASET_ID_HEADER, DATASET_MODE_HEADER } from "./constants";
@@ -127,7 +126,7 @@ export async function fetchSchema(datasetId?: string): Promise<SchemaResponse> {
 
 export async function postQuery(
   query: string,
-  previousContext?: QueryResultData
+  previousContext?: unknown
 ): Promise<QueryResponse> {
   const res = await fetchApi("/api/query", {
     method: "POST",

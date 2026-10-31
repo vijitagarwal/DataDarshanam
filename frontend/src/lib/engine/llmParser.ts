@@ -5,7 +5,7 @@
 
 import Groq from "groq-sdk";
 import { buildSchemaContext, getDatasetProfile } from "./dataEngine";
-import { DataRow, ParsedQuery, ParsedQueryError, ParsedQueryResponse } from "./types";
+import { ColumnProfile, DataRow, ParsedQuery, ParsedQueryError, ParsedQueryResponse } from "./types";
 
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
@@ -31,7 +31,7 @@ RULES:
 - Sort month_name chronologically with sort_by:"month_name", sort_order:"asc".
 - Sort year/month/quarter/date dimensions ascending unless the user asks otherwise.
 - If the query is unclear, choose the best metric and dimension from the profile and make a useful chart.
-- If the user asks for a field that is not listed, return {"error":true,"message":"Field not available in this dataset. Try one of the visible columns."}`;
+- If the user asks for a field that is not listed, do not invent a replacement. State which requested field is unavailable in one short sentence, without returning JSON.`;
 
 const CHITCHAT_EXACT = new Set([
   "hello", "hi", "hey", "awesome", "great", "thanks", "thank you",
@@ -72,6 +72,18 @@ function validationError(message: string, field?: string): ParsedQueryError {
   return { error: true, message, code: "INVALID_QUERY", ...(field ? { field } : {}) };
 }
 
+function normalizeColumnName(value: string): string {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+function findColumn(query: string, rows: DataRow[], roles: Set<ColumnProfile["role"]>): string | null {
+  const profile = getDatasetProfile(rows);
+  const normalizedQuery = normalizeColumnName(query);
+  return profile.columns.find(column =>
+    roles.has(column.role) && normalizedQuery.includes(normalizeColumnName(column.name))
+  )?.name ?? null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -82,9 +94,65 @@ function isFilterValue(value: unknown): value is string | number | string[] | nu
   return value.every(item => typeof item === "string" || (typeof item === "number" && Number.isFinite(item)));
 }
 
+function fallbackQueryPlan(query: string, rows: DataRow[]): ParsedQueryResponse | null {
+  const normalized = normalizeColumnName(query);
+  const words = normalized.replace(/_/g, " ");
+  if (!/\b(count|number|how many)\b/.test(words)) {
+    const metric = findColumn(normalized, rows, new Set(["numeric"]));
+    const dimension = findColumn(normalized, rows, new Set(["categorical", "date/time"]));
+    if (!metric) return null;
+
+    const requestsGrouping = /\b(by|for each|breakdown|trend)\b/.test(words) ||
+      /\b(which|highest|monthly)\b/.test(words) && dimension !== null;
+    if (requestsGrouping && dimension) {
+      const aggregation = /\baverage|mean\b/.test(normalized) ? "mean" : "sum";
+      const sortDescending = /\b(top|highest|best|largest|most)\b/.test(words);
+      return validateParsedQuery({
+        metric,
+        aggregation,
+        dimensions: [dimension],
+        filters: [],
+        chart_type: dimension === "month_name" || normalized.includes("trend") || normalized.includes("month") ? "line" : "bar",
+        sort_by: sortDescending ? "metric" : dimension,
+        sort_order: sortDescending ? "desc" : "asc",
+        limit: 100,
+        title: `${metric.replace(/_/g, " ")} by ${dimension.replace(/_/g, " ")}`,
+        x_label: dimension.replace(/_/g, " "),
+        y_label: metric.replace(/_/g, " "),
+      }, rows);
+    }
+  }
+
+  const dimension = findColumn(normalized, rows, new Set(["categorical", "date/time"]));
+  if (/\b(count|number)\b/.test(words) && /\b(records|rows|items|orders)\b/.test(words)) {
+    return validateParsedQuery({
+      metric: "__row_count",
+      aggregation: "count",
+      dimensions: dimension ? [dimension] : [],
+      filters: [],
+      chart_type: dimension ? "bar" : "scatter",
+      sort_by: dimension ?? "metric",
+      sort_order: "desc",
+      limit: 100,
+      title: dimension ? `Record count by ${dimension.replace(/_/g, " ")}` : "Record count",
+      x_label: dimension?.replace(/_/g, " ") ?? "Dataset",
+      y_label: "Record count",
+    }, rows);
+  }
+
+  return null;
+}
+
+export function parseDeterministicQuery(query: string, rows: DataRow[]): ParsedQueryResponse | null {
+  return fallbackQueryPlan(query, rows);
+}
+
 export function validateParsedQuery(value: unknown, rows: DataRow[]): ParsedQueryResponse {
   if (!isRecord(value)) return validationError("The AI response must be a JSON object.");
 
+  if ("error" in value) {
+    return { error: true, message: "The AI returned an invalid query-plan response instead of a JSON query plan.", code: "INVALID_MODEL_RESPONSE", field: "error" };
+  }
   const unexpected = Object.keys(value).find(key => !ALLOWED_FIELDS.has(key));
   if (unexpected) return validationError(`Unexpected field "${unexpected}" in AI query output.`, unexpected);
 
@@ -101,6 +169,12 @@ export function validateParsedQuery(value: unknown, rows: DataRow[]): ParsedQuer
 
   if (typeof value.aggregation !== "string" || !AGGREGATIONS.has(value.aggregation)) {
     return validationError(`Unsupported aggregation "${String(value.aggregation)}".`, "aggregation");
+  }
+  if (metric !== "__row_count" && value.aggregation === "count") {
+    return validationError("Count requires the record-count metric.", "aggregation");
+  }
+  if (metric === "__row_count" && value.aggregation !== "count") {
+    return validationError("The record-count metric requires count aggregation.", "aggregation");
   }
 
   if (!Array.isArray(value.dimensions) || value.dimensions.some(d => typeof d !== "string" || !columns.has(d))) {
@@ -196,6 +270,9 @@ export async function parseQuery(
     };
   }
 
+  const fallback = fallbackQueryPlan(userQuery, rows);
+  if (fallback && !fallback.error) return fallback;
+
   const schemaContext = buildSchemaContext(rows);
   const systemPrompt = BASE_SYSTEM_PROMPT.replace("{schema_context}", schemaContext);
 
@@ -208,7 +285,13 @@ export async function parseQuery(
   }
 
   const userContent = userQuery.trim() + contextBlock;
-  const client = getClient();
+  let client: Groq;
+  try {
+    client = getClient();
+  } catch {
+    console.error("Groq query parser is not configured.");
+    return { error: true, message: "AI query parsing is temporarily unavailable. Please try again later.", code: "AI_SERVICE_ERROR" };
+  }
 
   const messages: Groq.Chat.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
@@ -224,8 +307,13 @@ export async function parseQuery(
       max_tokens: 500,
     });
     raw = response.choices[0].message.content ?? "";
-  } catch (e) {
-    return { error: true, message: `Failed to reach AI service: ${e}`, code: "AI_SERVICE_ERROR" };
+  } catch (error) {
+    console.error("Groq query parsing failed", {
+      code: isRecord(error) && typeof error.code === "string" ? error.code : "UNKNOWN_PROVIDER_ERROR",
+      status: isRecord(error) && typeof error.status === "number" ? error.status : undefined,
+      name: error instanceof Error ? error.name : undefined,
+    });
+    return { error: true, message: "The Groq service is temporarily unavailable. Please try again.", code: "AI_SERVICE_ERROR" };
   }
 
   try {
