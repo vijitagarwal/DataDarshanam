@@ -112,6 +112,23 @@ export interface DatasetColumnInfo {
   dtype: string;
   role: "numeric" | "categorical" | "date/time" | "text";
   sample_values?: DataValue[];
+  missing?: number;
+  missing_pct?: number;
+  unique?: number;
+  numeric_stats?: {
+    min: number;
+    max: number;
+    mean: number;
+    median: number;
+    standard_deviation: number;
+    q1: number;
+    q3: number;
+    zero_count: number;
+    negative_count: number;
+    outlier_count: number;
+  };
+  frequency?: Array<{ value: string; count: number }>;
+  date_stats?: { earliest: string; latest: string; distinct_periods: number; granularity: string };
 }
 
 export interface DatasetProfile {
@@ -122,6 +139,10 @@ export interface DatasetProfile {
   categorical_columns: string[];
   date_columns: string[];
   sample_rows?: Record<string, DataValue>[];
+  health_score?: number;
+  duplicate_row_count?: number;
+  empty_column_count?: number;
+  quality_warnings?: Array<{ code: string; severity: "info" | "warning" | "critical"; message: string; column?: string }>;
 }
 
 export interface SchemaResponse {
@@ -129,6 +150,22 @@ export interface SchemaResponse {
   suggested_questions: string[];
   dataset_id?: string;
   filename?: string;
+  proactive_findings?: ProactiveFinding[];
+}
+
+export interface ProactiveFinding {
+  id: string;
+  title: string;
+  explanation: string;
+  severity: "info" | "attention" | "important";
+  metric: string;
+  evidence_ids: string[];
+  evidence: Array<{ id: string; label: string; value: number | string; category?: string }>;
+  limitations: string[];
+  dimension?: string;
+  aggregation: "sum" | "mean" | "count" | "max" | "min";
+  finding_type: "top_category" | "category_difference";
+  category?: string;
 }
 
 export interface UploadResponse extends SchemaResponse {

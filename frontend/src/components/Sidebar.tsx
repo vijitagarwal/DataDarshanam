@@ -3,12 +3,15 @@
 import React, { useEffect, useRef } from "react";
 import type { DatasetProfile, DatasetSummary, ChatEntry } from "@/lib/types";
 import { AlertCircle, Database, FileSpreadsheet, Trash2, X } from "lucide-react";
+import { InteractiveControls } from "./InteractiveControls";
+import type { StructuredQueryRequest } from "@/lib/api";
 
 export type WorkspacePanel = "dataset" | "history" | null;
 
 interface SidebarProps {
   panel: WorkspacePanel;
   profile?: DatasetProfile;
+  proactiveFindings?: import("@/lib/types").ProactiveFinding[];
   datasetName: string;
   datasetMode: "demo" | "custom";
   selectedDatasetId?: string | null;
@@ -25,11 +28,14 @@ interface SidebarProps {
   onSelectDemoDataset: () => void;
   isUploading?: boolean;
   onClose: () => void;
+  onExploreFinding?: (finding: import("@/lib/types").ProactiveFinding) => void;
+  onExecuteAnalysis?: (request: StructuredQueryRequest) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   panel,
   profile,
+  proactiveFindings = [],
   datasetName,
   datasetMode,
   selectedDatasetId,
@@ -46,6 +52,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectDemoDataset,
   isUploading = false,
   onClose,
+  onExploreFinding,
+  onExecuteAnalysis,
 }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,6 +134,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div><span>Categories</span><strong>{profile.categorical_columns.length}</strong></div>
                 <div><span>Date fields</span><strong>{profile.date_columns.length}</strong></div>
               </div>
+              {typeof profile.health_score === "number" && (
+                <div className="mt-4 rounded-lg border border-white/10 p-3">
+                  <span className="ledger-muted">Dataset health</span>
+                  <strong className="ml-2 text-lg">{profile.health_score}/100</strong>
+                  <p className="ledger-muted mt-1">100 minus missing-data, duplicate-row, and quality-warning penalties.</p>
+                </div>
+              )}
+              {proactiveFindings.length > 0 && (
+                <>
+                  <h3 className="ledger-subheading mt-4">Key findings</h3>
+                  <ul className="space-y-2">
+                    {proactiveFindings.slice(0, 4).map((finding) => (
+                      <li key={finding.id} className="ledger-empty-note">
+                        <strong className="block text-current">{finding.title}</strong>
+                        {finding.explanation}
+                        <button
+                          type="button"
+                          className="ledger-text-button mt-2"
+                          onClick={() => onExploreFinding?.(finding)}
+                        >
+                          Explore this finding
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {profile.quality_warnings && profile.quality_warnings.length > 0 && (
+                <>
+                  <h3 className="ledger-subheading mt-4">Data quality</h3>
+                  <ul className="space-y-2">
+                    {profile.quality_warnings.slice(0, 8).map((warning, index) => (
+                      <li key={`${warning.code}-${warning.column ?? index}`} className="ledger-empty-note">
+                        {warning.message}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              <InteractiveControls profile={profile} onExecute={(request) => {
+                onExecuteAnalysis?.(request);
+                onClose();
+              }} />
               <h3 className="ledger-subheading">Schema</h3>
               <div className="ledger-schema-scroll" role="region" aria-label="Dataset schema" tabIndex={0}>
                 <table className="ledger-schema-table">
@@ -133,7 +184,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <tbody>
                     {profile.columns.map((column) => (
                       <tr key={column.name}>
-                        <td>{column.name}</td><td>{column.role}</td><td>{column.dtype}</td>
+                        <td>
+                          {column.name}
+                          {typeof column.missing === "number" && column.missing > 0 && (
+                            <small className="block opacity-70">{column.missing} missing</small>
+                          )}
+                        </td>
+                        <td>{column.role}</td>
+                        <td>{column.numeric_stats ? `${column.numeric_stats.min}–${column.numeric_stats.max}` : column.dtype}</td>
                       </tr>
                     ))}
                   </tbody>

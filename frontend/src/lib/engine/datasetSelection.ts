@@ -3,6 +3,7 @@ import { DATASET_ID_HEADER, DATASET_MODE_HEADER } from "../constants";
 import { authenticateRequest } from "@/lib/supabase/auth";
 import { DatasetStoreError, loadUserDatasetRows } from "@/lib/supabase/datasets";
 import type { DataRow } from "./types";
+import type { DatasetProfile } from "./types";
 
 export { DATASET_ID_HEADER, DATASET_MODE_HEADER } from "../constants";
 
@@ -31,6 +32,7 @@ export async function resolveRequestDataset(request: Request): Promise<{
   rows: DataRow[];
   mode: "demo" | "custom";
   dataset?: { id: string; original_filename: string };
+  profile?: DatasetProfile | null;
 }> {
   const requestedMode = request.headers.get(DATASET_MODE_HEADER);
   const datasetId = request.headers.get(DATASET_ID_HEADER);
@@ -79,6 +81,7 @@ export async function resolveRequestDataset(request: Request): Promise<{
       rows: stored.rows,
       mode,
       dataset: { id: stored.dataset.id, original_filename: stored.dataset.original_filename },
+      profile: stored.profile,
     };
   } catch (error) {
     if (error instanceof DatasetSelectionError) throw error;

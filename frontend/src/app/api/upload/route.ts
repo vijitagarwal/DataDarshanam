@@ -4,6 +4,8 @@ import { CsvValidationError, decodeCsvBytes, MAX_CSV_BYTES, MAX_CSV_COLUMNS } fr
 import { readBoundedRequestBody, RequestBodyError } from "@/lib/requestBody";
 import { authenticateRequest } from "@/lib/supabase/auth";
 import { createUserDataset, DatasetStoreError } from "@/lib/supabase/datasets";
+import { enrichDatasetProfile } from "@/lib/engine/datasetProfiler";
+import { generateProactiveInsights } from "@/lib/engine/proactiveInsights";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "CSV file must contain at least one data row.", code: "INVALID_CSV" }, { status: 400 });
     }
 
-    const profile = getDatasetProfile(rows);
+    const profile = enrichDatasetProfile(getDatasetProfile(rows), rows);
     if (profile.column_count > MAX_CSV_COLUMNS) {
       return NextResponse.json({
         error: `CSV file exceeds the ${MAX_CSV_COLUMNS} column limit after date enrichment.`,
@@ -64,6 +66,7 @@ export async function POST(req: NextRequest) {
       }, { status: 413 });
     }
     const suggested = suggestQuestions(rows, 5);
+    const proactive_findings = generateProactiveInsights(rows, profile.numeric_columns, profile.categorical_columns);
     const dataset = await createUserDataset(auth.user.id, filename, bytes, rows, profile);
 
     return NextResponse.json({
@@ -73,6 +76,7 @@ export async function POST(req: NextRequest) {
       rows: rows.length,
       profile,
       suggested_questions: suggested,
+      proactive_findings,
     }, { status: 201 });
   } catch (e) {
     if (e instanceof RequestBodyError) {

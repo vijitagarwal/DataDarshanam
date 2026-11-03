@@ -11,6 +11,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/engine/dataEngine", () => ({
   runQuery: mocks.runQuery,
+  getDatasetProfile: () => ({
+    rows: rows.length,
+    column_count: 2,
+    columns: [{ name: "category", role: "categorical" }, { name: "revenue", role: "numeric" }],
+    numeric_columns: ["revenue"],
+    categorical_columns: ["category"],
+    date_columns: [],
+    text_columns: [],
+  }),
 }));
 vi.mock("@/lib/engine/datasetSelection", () => ({
   DatasetSelectionError: class DatasetSelectionError extends Error {
@@ -79,6 +88,76 @@ afterEach(() => {
 });
 
 describe("POST /api/query", () => {
+  it("executes count without requiring a numeric metric", async () => {
+    const response = await POST(request(JSON.stringify({
+      structured_query: { metric: "", aggregation: "count", dimensions: ["category"] },
+    })));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(mocks.runQuery.mock.calls[0][0]).toMatchObject({
+      metric: "__row_count",
+      aggregation: "count",
+      dimensions: ["category"],
+    });
+  });
+
+  it("rejects incompatible structured numeric aggregations", async () => {
+    const response = await POST(request(JSON.stringify({
+      structured_query: { metric: "category", aggregation: "sum", dimensions: [] },
+    })));
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.code).toBe("INCOMPATIBLE_AGGREGATION");
+    expect(mocks.runQuery).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported structured dimensions instead of silently dropping them", async () => {
+    const response = await POST(request(JSON.stringify({
+      structured_query: { metric: "revenue", aggregation: "sum", dimensions: ["unknown"] },
+    })));
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe("INVALID_STRUCTURED_QUERY");
+    expect(mocks.runQuery).not.toHaveBeenCalled();
+  });
+
+  it("uses row count semantics when count is selected with a nonnumeric metric", async () => {
+    const response = await POST(request(JSON.stringify({
+      structured_query: { metric: "category", aggregation: "count", dimensions: ["category"] },
+    })));
+    expect(response.status).toBe(200);
+    expect(mocks.runQuery.mock.calls[0][0]).toMatchObject({
+      metric: "__row_count",
+      aggregation: "count",
+      dimensions: ["category"],
+    });
+  });
+
+  it("accepts a current finding reference and rejects stale evidence", async () => {
+    const valid = await POST(request(JSON.stringify({
+      structured_query: {
+        metric: "revenue", aggregation: "sum", dimensions: ["category"],
+        filters: [{ field: "category", op: "eq", value: "Books" }],
+        finding: {
+          id: "PI-revenue-1",
+          evidence_ids: ["PI-revenue-1"],
+          finding_type: "top_category",
+          category: "Books",
+          aggregation: "sum",
+        },
+      },
+    })));
+    expect(valid.status).toBe(200);
+
+    const stale = await POST(request(JSON.stringify({
+      structured_query: {
+        metric: "revenue", aggregation: "sum", dimensions: ["category"],
+        finding: { id: "PI-revenue-old", evidence_ids: ["missing"], finding_type: "top_category" },
+      },
+    })));
+    expect(stale.status).toBe(409);
+    expect((await stale.json()).code).toBe("INVALID_FINDING");
+  });
   it("returns the established success response and runs all downstream stages", async () => {
     const response = await POST(request(JSON.stringify({ query: "show revenue by category" }), "workspace-123"));
     const body = await response.json();

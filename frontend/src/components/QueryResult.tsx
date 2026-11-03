@@ -8,6 +8,7 @@ import { FilterPills } from "./FilterPills";
 import { ResultTable } from "./ResultTable";
 import { Download, BookmarkCheck, Bookmark, Link2, RotateCw, PencilLine } from "lucide-react";
 import { serializeCsvRows } from "@/lib/csvExport";
+import { openReportPrintWindow, printableReportHtml } from "@/lib/report";
 
 interface QueryResultProps {
   entryIndex: number;
@@ -19,6 +20,7 @@ interface QueryResultProps {
   onEdit?: (query: string) => void;
   isDark?: boolean;
   onSuggestion?: (query: string) => void;
+  datasetName?: string;
 }
 
 export const QueryResult: React.FC<QueryResultProps> = ({
@@ -31,6 +33,7 @@ export const QueryResult: React.FC<QueryResultProps> = ({
   onEdit,
   isDark = true,
   onSuggestion,
+  datasetName = "Selected dataset",
 }) => {
   const [chartOverride, setChartOverride] = useState<string>("auto");
 
@@ -76,6 +79,30 @@ export const QueryResult: React.FC<QueryResultProps> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handlePrintReport = () => {
+    const headers = Object.keys(dataRows[0] ?? {});
+    const evidence = response.answer?.evidence ?? response.evidence?.facts ?? [];
+    const html = printableReportHtml({
+      title: parsed?.title || query,
+      datasetName,
+      generatedAt: new Date(),
+      executiveSummary: response.answer?.headline ? [response.answer.headline, ...response.answer.explanation] : [insight],
+      keyFindings: evidence.slice(0, 5).map((item) => `${item.label}: ${typeof item.value === "number" ? item.value.toLocaleString() : item.value}`),
+      evidence: evidence.map((item) => ({ id: item.id, label: item.label, value: item.value })),
+      limitations: [...(response.answer?.limitations ?? []), ...((response.evidence?.unavailableInterpretations ?? []))],
+      tableHeaders: headers,
+      tableRows: dataRows,
+      truncatedRows: dataRows.length > 200 ? dataRows.length : undefined,
+      chart: {
+        labels: dataRows.slice(0, 12).map((row) => String(row[result?.dimensions[0] ?? ""] ?? "")),
+        values: dataRows.slice(0, 12).map((row) => Number(row[metric])).filter(Number.isFinite),
+      },
+    });
+    if (!openReportPrintWindow(html)) {
+      window.alert("Your browser blocked the report window. Allow popups and try again.");
+    }
   };
 
   const handleSave = () => {
@@ -142,6 +169,9 @@ export const QueryResult: React.FC<QueryResultProps> = ({
             <button type="button" onClick={handleSave} disabled={isSaved} className="ledger-button ledger-button-primary">
               {isSaved ? <BookmarkCheck size={15} aria-hidden="true" /> : <Bookmark size={15} aria-hidden="true" />}
               {isSaved ? "Saved to Charts" : "Save chart"}
+            </button>
+            <button type="button" onClick={handlePrintReport} className="ledger-button">
+              Print report / PDF
             </button>
           </div>
         </section>

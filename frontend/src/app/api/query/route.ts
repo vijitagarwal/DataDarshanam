@@ -7,6 +7,9 @@ import { generateInsight } from "@/lib/engine/insightGen";
 import { generateAnalyticalEvidence } from "@/lib/engine/analyticalEvidence";
 import { validateConversationContext, resolveConversationReference } from "@/lib/conversationContext";
 import { DATASET_ID_HEADER, DATASET_MODE_HEADER } from "@/lib/constants";
+import { getDatasetProfile } from "@/lib/engine/dataEngine";
+import { generateProactiveInsights } from "@/lib/engine/proactiveInsights";
+import type { ParsedQuery } from "@/lib/engine/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,10 +28,11 @@ export async function POST(req: NextRequest) {
     }
 
     const queryValue = (body as Record<string, unknown>).query;
-    if (typeof queryValue !== "string") {
+    const structuredValue = (body as Record<string, unknown>).structured_query;
+    if (typeof queryValue !== "string" && typeof structuredValue !== "object") {
       return NextResponse.json({ error: true, message: "Query must be a string" }, { status: 400 });
     }
-    const query = queryValue.trim();
+    const query = typeof queryValue === "string" ? queryValue.trim() : "";
     const previousContextValue = (body as Record<string, unknown>).previous_context;
     const previousContext = previousContextValue !== null &&
       typeof previousContextValue === "object" &&
@@ -43,7 +47,7 @@ export async function POST(req: NextRequest) {
     if (previousContext && !conversationContext) {
       return NextResponse.json({ error: true, message: "Conversation context is invalid for the selected dataset." }, { status: 400 });
     }
-    if (!query) {
+    if (!query && !structuredValue) {
       return NextResponse.json({ error: true, message: "Query string cannot be empty" }, { status: 400 });
     }
 
@@ -67,7 +71,81 @@ export async function POST(req: NextRequest) {
 
     // Parse query via LLM
     const parserContext = conversationContext?.turns.at(-1)?.result as unknown as Record<string, unknown> | null ?? null;
-    let parsed = await parseQuery(reference.resolvedQuery ?? query, rows, parserContext);
+    let parsed;
+    if (structuredValue) {
+      const request = structuredValue as Record<string, unknown>;
+      const metric = typeof request.metric === "string" ? request.metric : "";
+      const aggregation = request.aggregation;
+      const requestedDimensions = Array.isArray(request.dimensions)
+        ? request.dimensions.filter((value): value is string => typeof value === "string")
+        : [];
+      if (requestedDimensions.some((dimension) => !supportedColumns.includes(dimension))) {
+        return NextResponse.json({ error: true, message: "Select supported dimensions for this dataset.", code: "INVALID_STRUCTURED_QUERY" }, { status: 400 });
+      }
+      const dimensions = requestedDimensions;
+      const filters = Array.isArray(request.filters)
+        ? request.filters.filter((filter): filter is Record<string, unknown> => typeof filter === "object" && filter !== null)
+          .flatMap((filter) => {
+            const field = filter.field;
+            const op = filter.op;
+            const value = filter.value;
+            if (typeof field !== "string" || !supportedColumns.includes(field)) return [];
+            if (!["eq", "neq", "gt", "lt", "gte", "lte"].includes(String(op))) return [];
+            if (typeof value !== "string" && typeof value !== "number") return [];
+            return [{ field, op, value }] as Array<{ field: string; op: "eq" | "neq" | "gt" | "lt" | "gte" | "lte"; value: string | number }>;
+          })
+        : [];
+      if (!["sum", "mean", "count", "max", "min"].includes(String(aggregation))) {
+        return NextResponse.json({ error: true, message: "Unsupported aggregation.", code: "INVALID_STRUCTURED_QUERY" }, { status: 400 });
+      }
+      if (aggregation === "count") {
+        if (metric && metric !== "__row_count" && !supportedColumns.includes(metric)) {
+          return NextResponse.json({ error: true, message: "Count needs a compatible metric or row-count request.", code: "INVALID_STRUCTURED_QUERY" }, { status: 400 });
+        }
+      } else if (!metric || !supportedColumns.includes(metric)) {
+        return NextResponse.json({ error: true, message: "Select a supported metric for this aggregation.", code: "INVALID_STRUCTURED_QUERY" }, { status: 400 });
+      }
+      const numericColumns = new Set(supportedColumns.filter((column) => rows.some((row) => typeof row[column] === "number")));
+      if (aggregation !== "count" && !numericColumns.has(metric)) {
+        return NextResponse.json({ error: true, message: "This aggregation only supports numeric columns.", code: "INCOMPATIBLE_AGGREGATION" }, { status: 400 });
+      }
+      const finding = request.finding;
+      if (finding !== undefined) {
+        if (typeof finding !== "object" || finding === null) {
+          return NextResponse.json({ error: true, message: "The finding reference is invalid.", code: "INVALID_FINDING" }, { status: 400 });
+        }
+        const profile = getDatasetProfile(rows);
+        const findingRef = finding as Record<string, unknown>;
+        const validFindings = generateProactiveInsights(rows, profile.numeric_columns, profile.categorical_columns);
+        const requestedFinding = validFindings.find((item) => item.id === findingRef.id);
+        const evidenceIds = Array.isArray(findingRef.evidence_ids) ? findingRef.evidence_ids : [];
+        if (!requestedFinding || evidenceIds.length === 0 ||
+          evidenceIds.some((id) => !requestedFinding.evidence_ids.includes(String(id))) ||
+          requestedFinding.metric !== metric ||
+          requestedFinding.dimension !== dimensions[0] ||
+          requestedFinding.aggregation !== aggregation ||
+          requestedFinding.finding_type !== findingRef.finding_type ||
+          requestedFinding.category !== findingRef.category) {
+          return NextResponse.json({ error: true, message: "This finding is stale, unsupported, or ambiguous in the selected dataset.", code: "INVALID_FINDING" }, { status: 409 });
+        }
+      }
+      const normalizedMetric = aggregation === "count" ? "__row_count" : metric;
+      parsed = {
+        metric: normalizedMetric,
+        aggregation,
+        dimensions,
+        filters,
+        chart_type: dimensions.length ? (rows.some((row) => typeof row[dimensions[0]] === "string" && !Number.isNaN(Date.parse(String(row[dimensions[0]])))) ? "line" : "bar") : "bar",
+        sort_by: metric,
+        sort_order: "desc",
+        limit: 100,
+        title: `${aggregation === "mean" ? "Average" : aggregation === "count" ? "Count" : aggregation} of ${metric.replace(/_/g, " ")}`,
+        x_label: dimensions[0] ?? metric,
+        y_label: metric,
+      } as ParsedQuery;
+    } else {
+      parsed = await parseQuery(reference.resolvedQuery ?? query, rows, parserContext);
+    }
 
     if (parsed.error) {
       const status = parsed.code === "AI_SERVICE_ERROR" ? 503 : 200;
@@ -86,11 +164,11 @@ export async function POST(req: NextRequest) {
           ...parsed.filters.filter((filter) => filter.field !== reference.temporalFilter?.field),
           { field: reference.temporalFilter.field, op: "eq", value: reference.temporalFilter.year },
         ],
-      };
+      } as ParsedQuery;
     }
 
     // Run data query
-    const result = runQuery(parsed, rows);
+    const result = runQuery(parsed as ParsedQuery, rows);
 
     if (result.error) {
       return NextResponse.json({

@@ -20,11 +20,13 @@ import {
   getSelectedDatasetName,
   postDashboardQuery,
   postQuery,
+  postStructuredQuery,
   selectCustomDataset,
   selectDemoDataset,
   uploadCSVFile,
 } from "@/lib/api";
 import type { ChatEntry, DatasetSummary, SavedChart, SchemaResponse } from "@/lib/types";
+import type { StructuredQueryRequest } from "@/lib/api";
 import type { DocumentItem } from "@/lib/documentApi";
 
 type ViewName = "analyze" | "documents" | "charts";
@@ -242,6 +244,72 @@ export default function Home() {
     }
   }, [chatEntries, datasetMode, isLoading, schema, schemaError, selectedDatasetId]);
 
+  const handleStructuredQuery = useCallback(async (request: StructuredQueryRequest, label: string) => {
+    if (isLoading || !schema) return;
+    const entryId = `entry-${Date.now()}`;
+    setChatEntries((entries) => [...entries, {
+      id: entryId,
+      type: "query",
+      query: label,
+      isLoading: true,
+    }]);
+    setIsLoading(true);
+    const previousContext = chatEntries.slice(-3).map((entry) => entry.response)
+      .filter((response): response is NonNullable<typeof response> =>
+        Boolean(response?.result && response.evidence && !response.error))
+      .map((response) => ({
+        question: response.query,
+        result: {
+          title: response.query,
+          metric: response.result!.metric,
+          dimensions: response.result!.dimensions ?? [],
+          evidence: response.evidence!.facts ?? [],
+        },
+      }));
+    try {
+      const response = await postStructuredQuery(request, previousContext.length ? {
+        dataset_id: datasetMode === "custom" ? selectedDatasetId ?? "" : "demo",
+        turns: previousContext,
+      } : undefined);
+      setChatEntries((entries) => entries.map((entry) => entry.id === entryId
+        ? { ...entry, response, isLoading: false }
+        : entry));
+      setStatusMessage(response.error ? response.message ?? "The structured request could not be completed." : "Analysis finished.");
+    } catch (reason: unknown) {
+      const message = reason instanceof Error ? reason.message : "The structured request could not be completed.";
+      setChatEntries((entries) => entries.map((entry) => entry.id === entryId
+        ? { ...entry, isLoading: false, response: { success: false, error: true, query: label, insight: message, message } }
+        : entry));
+      setStatusMessage(`Analysis failed: ${message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [chatEntries, datasetMode, isLoading, schema, selectedDatasetId]);
+
+  const handleFindingExplore = (finding: NonNullable<SchemaResponse["proactive_findings"]>[number]) => {
+    if (!finding.dimension || !finding.category || !schema?.profile.columns.some((column) =>
+      column.name === finding.dimension && column.role === "categorical")) {
+      setStatusMessage("This finding cannot be explored safely because its category is no longer supported.");
+      return;
+    }
+    void handleStructuredQuery({
+      metric: finding.metric,
+      aggregation: finding.aggregation,
+      dimensions: [finding.dimension],
+      filters: [{ field: finding.dimension, op: "eq", value: finding.category }],
+      finding: {
+        id: finding.id,
+        evidence_ids: finding.evidence_ids,
+        finding_type: finding.finding_type,
+        category: finding.category,
+        aggregation: finding.aggregation,
+      },
+    }, `Explore ${finding.title}`);
+  };
+
+  const handleAnalysisExecute = (request: StructuredQueryRequest) =>
+    handleStructuredQuery(request, `${request.aggregation === "mean" ? "Average" : request.aggregation === "count" ? "Count" : request.aggregation} of ${request.metric.replace(/_/g, " ")}`);
+
   const handleGenerateDashboard = () => handleSendQuery("generate full dashboard overview");
 
   function handleNewChat() {
@@ -441,6 +509,7 @@ export default function Home() {
       <Sidebar
         panel={openPanel}
         profile={schema?.profile}
+        proactiveFindings={schema?.proactive_findings}
         datasetName={datasetName}
         datasetMode={datasetMode}
         selectedDatasetId={selectedDatasetId}
@@ -457,6 +526,8 @@ export default function Home() {
         onSelectDemoDataset={handleSelectDemoDataset}
         isUploading={isUploading}
         onClose={() => setOpenPanel(null)}
+        onExploreFinding={handleFindingExplore}
+        onExecuteAnalysis={handleAnalysisExecute}
       />
 
       <main id="main-content" className={`ledger-main ${activeView === "analyze" ? "ledger-main-analyze" : ""}`}>
@@ -521,6 +592,7 @@ export default function Home() {
                           }}
                           isDark={darkTheme}
                           onSuggestion={handleSendQuery}
+                          datasetName={datasetName}
                         />
                       );
                     }

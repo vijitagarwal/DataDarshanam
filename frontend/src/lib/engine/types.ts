@@ -60,6 +60,25 @@ export interface ColumnProfile {
   missing: number;
   missing_pct: number;
   samples: string[];
+  numeric_stats?: {
+    min: number;
+    max: number;
+    mean: number;
+    median: number;
+    standard_deviation: number;
+    q1: number;
+    q3: number;
+    zero_count: number;
+    negative_count: number;
+    outlier_count: number;
+  };
+  frequency?: Array<{ value: string; count: number }>;
+  date_stats?: {
+    earliest: string;
+    latest: string;
+    distinct_periods: number;
+    granularity: string;
+  };
 }
 
 export interface DatasetProfile {
@@ -70,6 +89,16 @@ export interface DatasetProfile {
   categorical_columns: string[];
   date_columns: string[];
   text_columns: string[];
+  file_size?: number;
+  duplicate_row_count?: number;
+  empty_column_count?: number;
+  health_score?: number;
+  quality_warnings?: Array<{
+    code: string;
+    severity: "info" | "warning" | "critical";
+    message: string;
+    column?: string;
+  }>;
 }
 
 export interface DataRow {

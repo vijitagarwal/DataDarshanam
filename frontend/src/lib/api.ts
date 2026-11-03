@@ -141,8 +141,39 @@ export async function postQuery(
     throw new Error((typeof errorData.error === "string" && errorData.error) ||
       errorData.message || errorData.detail || `Query failed (${res.status})`);
   }
-  return res.json();
+    return res.json();
 }
+
+export interface StructuredQueryRequest {
+    metric: string;
+    aggregation: "sum" | "mean" | "count" | "max" | "min";
+    dimensions?: string[];
+    filters?: Array<{ field: string; op: "eq" | "neq" | "gt" | "lt" | "gte" | "lte"; value: string | number }>;
+    finding?: {
+      id: string;
+      evidence_ids: string[];
+      finding_type: "top_category" | "category_difference";
+      category?: string;
+      aggregation?: "sum" | "mean" | "count" | "max" | "min";
+    };
+}
+
+export async function postStructuredQuery(request: StructuredQueryRequest, previousContext?: unknown): Promise<QueryResponse> {
+    const res = await fetchApi("/api/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        structured_query: request,
+        previous_context: previousContext || null,
+      }),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error((typeof errorData.error === "string" && errorData.error) ||
+        errorData.message || `Structured query failed (${res.status})`);
+}
+    return res.json();
+  }
 
 export async function postDashboardQuery(
   query: string = "generate full dashboard overview"

@@ -4,6 +4,10 @@ import type { DatasetSummary } from "@/lib/types";
 import { decodeCsvBytes } from "@/lib/engine/csv";
 import { getDatasetProfile, loadFromCSVText } from "@/lib/engine/dataEngine";
 import { createServiceRoleSupabaseClient } from "./server";
+import { createHash } from "node:crypto";
+import { DATASET_PROFILE_VERSION, isStoredProfileCompatible } from "@/lib/datasetProfileStorage";
+
+export { DATASET_PROFILE_VERSION };
 
 export const DATASET_BUCKET = "datasets";
 
@@ -25,22 +29,33 @@ export class DatasetStoreError extends Error {
   }
 }
 
-function safeProfile(profile: DatasetProfile): Record<string, unknown> {
+function safeProfile(profile: DatasetProfile, sourceHash: string): Record<string, unknown> {
   return {
+    profile_version: DATASET_PROFILE_VERSION,
+    source_hash: sourceHash,
     rows: profile.rows,
     column_count: profile.column_count,
-    columns: profile.columns.map(({ name, dtype, role, unique, missing, missing_pct }) => ({
+    columns: profile.columns.map(({ name, dtype, role, unique, missing, missing_pct, samples, numeric_stats, frequency, date_stats }) => ({
       name,
       dtype,
       role,
       unique,
       missing,
       missing_pct,
+      samples,
+      numeric_stats,
+      frequency,
+      date_stats,
     })),
     numeric_columns: profile.numeric_columns,
     categorical_columns: profile.categorical_columns,
     date_columns: profile.date_columns,
     text_columns: profile.text_columns,
+    file_size: profile.file_size,
+    duplicate_row_count: profile.duplicate_row_count,
+    empty_column_count: profile.empty_column_count,
+    health_score: profile.health_score,
+    quality_warnings: profile.quality_warnings,
   };
 }
 
@@ -93,7 +108,7 @@ async function findUserDataset(
 export async function loadUserDatasetRows(
   userId: string,
   datasetId: string,
-): Promise<{ dataset: DatasetSummary; rows: DataRow[] } | null> {
+): Promise<{ dataset: DatasetSummary; rows: DataRow[]; profile: DatasetProfile | null } | null> {
   const client = createServiceRoleSupabaseClient();
   const record = await findUserDataset(userId, datasetId, ["ready"], client);
   if (!record) return null;
@@ -115,7 +130,12 @@ export async function loadUserDatasetRows(
     throw new DatasetStoreError("DATASET_FILE_UNAVAILABLE", "The saved dataset file failed its integrity check.");
   }
 
-  return { dataset: mapDataset(record), rows };
+  const fileBytes = new Uint8Array(await data.arrayBuffer());
+  const sourceHash = createHash("sha256").update(fileBytes).digest("hex");
+  const storedProfile = record.schema;
+  const calculatedProfile = getDatasetProfile(rows);
+  const trustworthyProfile = isStoredProfileCompatible(storedProfile, sourceHash, rows.length, calculatedProfile.column_count);
+  return { dataset: mapDataset(record), rows, profile: trustworthyProfile ? storedProfile as unknown as DatasetProfile : null };
 }
 
 async function removeReservation(
@@ -192,7 +212,8 @@ export async function createUserDataset(
     throw new DatasetStoreError("DATASET_STORE_FAILED", "Unable to save the CSV file.");
   }
 
-  const safeSchema = safeProfile(profile);
+  const sourceHash = createHash("sha256").update(bytes).digest("hex");
+  const safeSchema = safeProfile(profile, sourceHash);
   try {
     const { data, error: completeError } = await client
       .from("datasets")
